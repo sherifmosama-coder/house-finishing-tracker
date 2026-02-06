@@ -38,6 +38,14 @@
         user-select: none; /* Standard */
       }
       
+      /* History Modal */
+      .history-item { border-left: 3px solid #ccc; padding-left: 15px; margin-bottom: 20px; position: relative; }
+      .history-item::before { content: ''; position: absolute; left: -8px; top: 0; width: 13px; height: 13px; background: #ccc; border-radius: 50%; }
+      .history-meta { font-size: 0.85rem; color: #7f8c8d; margin-bottom: 8px; white-space: pre-wrap; } /* Allow wrapping for meta/reason */
+      .history-val { display: flex; justify-content: space-between; align-items: flex-start; font-size: 0.9rem; border-bottom: 1px dashed #eee; padding: 4px 0; } /* Align top */
+      .history-label { font-weight: 600; font-size: 0.8rem; color: #555; margin-top: 2px; min-width: 60px; }
+      .history-text { text-align: right; word-break: break-word; flex: 1; margin-left: 10px; } /* Wrap long values */
+
       /* Login Screen */
       #login-screen { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: var(--primary-color); z-index: 3000; display: flex; align-items: center; justify-content: center; flex-direction: column; color: white; }
       .login-card { background: white; padding: 30px; border-radius: 15px; width: 90%; max-width: 350px; color: #333; box-shadow: 0 10px 25px rgba(0,0,0,0.2); }
@@ -299,9 +307,14 @@
 
                 <div class="mb-3">
                   <label class="form-label"><i class="fas fa-paperclip"></i> Attachments</label>
-                  <input class="form-control" type="file" id="fileInput" accept="image/*,application/pdf" multiple>
+                  <div class="input-group">
+                    <input class="form-control" type="file" id="fileInput" accept="image/*,application/pdf" multiple onchange="handleNewFileSelect(this)">
+                  </div>
+                  <div class="form-text small text-muted">Click to add files. You can add multiple times.</div>
                   
-                  <div id="existingFilesList" class="mt-2"></div>
+                  <div id="newFilesList" class="mt-2"></div>
+                  
+                  <div id="existingFilesList" class="mt-2 border-top pt-2" style="display:none;"></div>
                 </div>
 
                 <div class="mb-3 bg-light p-2 rounded border" id="editReasonSection" style="display:none;">
@@ -310,9 +323,29 @@
                 </div>
               </form>
             </div>
-            <div class="modal-footer">
-              <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
-              <button type="button" class="btn btn-primary" onclick="submitForm()" id="saveBtn">Save</button>
+            <div class="modal-footer justify-content-between">
+              <button type="button" class="btn btn-outline-info" id="historyBtn" onclick="showHistory()" style="display:none;">
+                <i class="fas fa-history"></i> History
+              </button>
+              <div>
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                <button type="button" class="btn btn-primary" onclick="submitForm()" id="saveBtn">Save</button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+      
+      <div class="modal fade" id="historyModal" tabindex="-1">
+        <div class="modal-dialog modal-dialog-centered modal-dialog-scrollable">
+          <div class="modal-content">
+            <div class="modal-header bg-light">
+              <h5 class="modal-title"><i class="fas fa-history me-2"></i>Edit History</h5>
+              <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+              <div id="history-loader" class="text-center py-3"><div class="spinner-border text-primary"></div></div>
+              <div id="history-list"></div>
             </div>
           </div>
         </div>
@@ -330,13 +363,16 @@
       let displayedTransactions = [];
       let appSettings = {};
       let entryModal;
+      let historyModal; // Add this
       let currentUser = "";
       
       // State for File Handling
       let currentExistingFiles = []; // Stores objects {url, id}
+      let newFilesQueue = [];        // Stores actual File objects to be uploaded
 
       window.onload = function() {
         entryModal = new bootstrap.Modal(document.getElementById('entryModal'));
+        historyModal = new bootstrap.Modal(document.getElementById('historyModal')); // Add this
       };
 
       // --- LOGIC: PAYMENT METHOD CHANGE ---
@@ -417,7 +453,10 @@
         container.innerHTML = '';
         
         if (currentExistingFiles.length > 0) {
-            container.innerHTML = '<div class="small text-muted mb-1">Attached Files:</div>';
+            container.style.display = 'block';
+            container.innerHTML = '<div class="small text-muted mb-1">Previously Saved:</div>';
+        } else {
+            container.style.display = 'none';
         }
 
         currentExistingFiles.forEach((file, index) => {
@@ -441,6 +480,57 @@
         renderExistingFiles();
       }
 
+      // --- NEW FILE QUEUE LOGIC ---
+      
+      function handleNewFileSelect(input) {
+        if (input.files && input.files.length > 0) {
+            Array.from(input.files).forEach(file => {
+                newFilesQueue.push(file);
+            });
+            renderNewFiles();
+        }
+        // Reset input so same file can be selected again if needed
+        input.value = ''; 
+      }
+
+      function renderNewFiles() {
+        const container = document.getElementById('newFilesList');
+        container.innerHTML = '';
+        
+        if (newFilesQueue.length > 0) {
+            container.innerHTML = '<div class="small text-muted mb-1">Ready to Upload:</div>';
+        }
+
+        newFilesQueue.forEach((file, index) => {
+            const div = document.createElement('div');
+            div.className = "d-flex align-items-center justify-content-between bg-white p-2 mb-1 rounded border border-primary";
+            div.innerHTML = `
+                <span class="text-truncate text-primary" style="max-width: 85%;">
+                    <i class="fas fa-plus-circle me-1"></i> ${file.name} 
+                    <small class="text-muted ms-1">(${formatBytes(file.size)})</small>
+                </span>
+                <button type="button" class="btn btn-sm btn-outline-danger border-0" onclick="removeNewFile(${index})">
+                    <i class="fas fa-times"></i>
+                </button>
+            `;
+            container.appendChild(div);
+        });
+      }
+
+      function removeNewFile(index) {
+        newFilesQueue.splice(index, 1);
+        renderNewFiles();
+      }
+
+      function formatBytes(bytes, decimals = 1) {
+        if (!+bytes) return '0 B';
+        const k = 1024;
+        const dm = decimals < 0 ? 0 : decimals;
+        const sizes = ['B', 'KB', 'MB', 'GB'];
+        const i = Math.floor(Math.log(bytes) / Math.log(k));
+        return `${parseFloat((bytes / Math.pow(k, i)).toFixed(dm))} ${sizes[i]}`;
+      }
+
       // --- MODAL LOGIC ---
 
       function openModal(id = null) {
@@ -455,9 +545,11 @@
         document.getElementById('user').value = currentUser;
         document.getElementById('editReasonSection').style.display = 'none';
         
-        // Reset File Array
+        // Reset File Arrays
         currentExistingFiles = [];
-        renderExistingFiles(); // This handles the clearing of the list now
+        newFilesQueue = [];
+        renderExistingFiles();
+        renderNewFiles();
         document.getElementById('fileInput').value = "";
 
         // Reset Method
@@ -468,9 +560,11 @@
         let isReadOnly = false;
         document.getElementById('modalTitle').innerText = 'New Record';
         document.getElementById('saveBtn').style.display = 'block';
+        document.getElementById('historyBtn').style.display = 'none'; // Hide history by default
         toggleFormInputs(false); // Enable inputs
-
+        
         if (id) {
+          document.getElementById('historyBtn').style.display = 'block'; // Show if editing
           const t = allTransactions.find(x => x.ID === id);
           if (!t) return;
 
@@ -569,9 +663,9 @@
         };
 
         // Handle NEW Files (Promise Loop)
-        const fileInput = document.getElementById('fileInput');
-        if (fileInput.files.length > 0) {
-            const filePromises = Array.from(fileInput.files).map(file => {
+        // Use the queue instead of the input element directly
+        if (newFilesQueue.length > 0) {
+            const filePromises = newFilesQueue.map(file => {
                 return new Promise((resolve, reject) => {
                     const reader = new FileReader();
                     reader.onload = e => resolve({ data: e.target.result, name: file.name });
@@ -588,11 +682,56 @@
                 .catch(error => {
                     showError("File read error: " + error);
                     btn.disabled = false;
+                    btn.innerText = 'Save';
                 });
         } else {
             // No new files
             sendToBackend(formData);
         }
+      }
+
+      // --- HISTORY LOGIC ---
+      function showHistory() {
+        const id = document.getElementById('recordId').value;
+        if(!id) return;
+        
+        historyModal.show();
+        document.getElementById('history-loader').style.display = 'block';
+        document.getElementById('history-list').innerHTML = '';
+        
+        google.script.run.withSuccessHandler(renderHistory).getRecordHistory(id);
+      }
+
+      function renderHistory(json) {
+        document.getElementById('history-loader').style.display = 'none';
+        const list = JSON.parse(json);
+        const container = document.getElementById('history-list');
+        
+        if (list.length === 0) {
+          container.innerHTML = '<div class="text-center text-muted">No edit history found.</div>';
+          return;
+        }
+
+        list.forEach(item => {
+          const d = item.data;
+          const html = `
+            <div class="history-item">
+              <div class="history-meta">
+                <strong>${item.editDate}</strong> by ${item.editor}<br>
+                Reason: <em>${item.reason}</em>
+              </div>
+              <div class="card card-body bg-light border-0 p-2">
+                <div class="small text-muted mb-1 text-uppercase fw-bold" style="font-size:0.7rem">Previous Values</div>
+                <div class="history-val"><span class="history-label">Date</span> <span class="history-text">${d.date}</span></div>
+                <div class="history-val"><span class="history-label">Amount</span> <span class="history-text">${formatCurrency(d.amount)}</span></div>
+                <div class="history-val"><span class="history-label">Category</span> <span class="history-text">${d.category}</span></div>
+                <div class="history-val"><span class="history-label">Type</span> <span class="history-text">${d.type}</span></div>
+                <div class="history-val"><span class="history-label">Desc</span> <span class="history-text">${d.description}</span></div>
+              </div>
+            </div>
+          `;
+          container.innerHTML += html;
+        });
       }
 
       function sendToBackend(data) {
