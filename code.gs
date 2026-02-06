@@ -189,6 +189,41 @@ function handleEdit(id, form, fileUrl, fileId, timestamp) {
   range.setValues(vals);
 }
 
+/* -------------------------------------------------------------------------
+   API: GET HISTORY
+   ------------------------------------------------------------------------- */
+function getRecordHistory(recordId) {
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  const logSheet = ss.getSheetByName(SHEET_NAME_LOGS);
+  if (!logSheet) return JSON.stringify([]);
+
+  const data = logSheet.getDataRange().getValues();
+  // Log Structure: [LogUUID, RecordID, EditTime, Editor, EditReason, ...OriginalData]
+  // OriginalData starts from the specific columns sliced in handleEdit
+  
+  const history = data
+    .filter(row => row[1] === recordId) // Match Record ID
+    .map(row => {
+      // Map relevant original values (Indices based on handleEdit slice logic)
+      return {
+        editDate: Utilities.formatDate(new Date(row[2]), Session.getScriptTimeZone(), "yyyy-MM-dd HH:mm"),
+        editor: row[3],
+        reason: row[4],
+        data: {
+          date: Utilities.formatDate(new Date(row[5]), Session.getScriptTimeZone(), "yyyy-MM-dd"),
+          user: row[6],
+          type: row[7],
+          category: row[9],
+          amount: row[10],
+          description: row[11]
+        }
+      };
+    })
+    .reverse(); // Newest edits first
+
+  return JSON.stringify(history);
+}
+
 function saveFileToDrive(base64Data, fileName) {
   try {
     const splitBase = base64Data.split(',');
