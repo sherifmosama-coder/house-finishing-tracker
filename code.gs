@@ -195,53 +195,101 @@ function processForm(formObject) {
 }
 
 /* -------------------------------------------------------------------------
-   HELPER: HANDLE EDIT
+   CORE: HANDLE EDIT (Cell-Level Update & Highlight)
    ------------------------------------------------------------------------- */
-function handleEdit(id, form, fileUrl, fileId, timestamp) {
+function handleEdit(recordId, form, strUrls, strIds, editTime) {
   const ss = SpreadsheetApp.getActiveSpreadsheet();
   const transSheet = ss.getSheetByName(SHEET_NAME_TRANS);
   const logSheet = ss.getSheetByName(SHEET_NAME_LOGS);
   
   const data = transSheet.getDataRange().getValues();
-  const rowIndex = data.findIndex(r => r[0] == id);
+  const rowIndex = data.findIndex(r => r[0] === recordId); // Find row by ID
   
   if (rowIndex === -1) throw new Error("Record not found");
   
-  const realRowIndex = rowIndex + 1;
+  const sheetRowIndex = rowIndex + 1; // 1-based row for Sheet operations
   const originalRow = data[rowIndex];
   
-  // Archive to Logs (Dynamic Length)
-  const logRow = [
-    Utilities.getUuid(),
-    id,
-    timestamp,
-    form.user, 
-    form.editReason || "No reason provided",
-    ...originalRow.slice(2) // Copy all original data columns safely
-  ];
-  logSheet.appendRow(logRow);
+  // Define Column Mapping (0-based Index in Array -> Field Name in Form)
+  const map = {
+    2: 'date',
+    3: 'user', 
+    6: 'category',
+    7: 'amount',
+    8: 'description',
+    9: 'fileUrl', 
+    10: 'fileId', 
+    12: 'paymentMethod',
+    13: 'methodDate',
+    14: 'installments'
+  };
+
+  const updates = []; 
   
-  // Update Transaction Sheet
-  // Map fields to specific column indices (1-based)
-  // Col 3=Date ... Col 12=User, Col 13=Method, Col 14=MethodDate, Col 15=Installments
-  const range = transSheet.getRange(realRowIndex, 3, 1, 13); // Grab Date -> Installments
-  const vals = [[
-    form.date,
-    form.user,
-    form.type,
-    form.scope,
-    form.category,
-    form.amount,
-    form.description,
-    fileUrl, // Now contains comma-separated list
-    fileId,  // Now contains comma-separated list
-    form.user, 
-    form.paymentMethod,
-    form.methodDate,
-    form.installments
-  ]];
-  
-  range.setValues(vals);
+  // 1. Check mapped fields
+  for (const [colIdxStr, fieldKey] of Object.entries(map)) {
+    const colIdx = parseInt(colIdxStr);
+    const oldVal = originalRow[colIdx];
+    let newVal;
+
+    if (fieldKey === 'fileUrl') newVal = strUrls;
+    else if (fieldKey === 'fileId') newVal = strIds;
+    else if (fieldKey === 'user') newVal = form.user || oldVal; 
+    else newVal = form[fieldKey]; 
+
+    let isDifferent = false;
+    
+    // Normalize & Compare
+    if (newVal instanceof Date || oldVal instanceof Date || fieldKey.toLowerCase().includes('date')) {
+       const d1 = newVal ? new Date(newVal).setHours(0,0,0,0) : 'null';
+       const d2 = oldVal ? new Date(oldVal).setHours(0,0,0,0) : 'null';
+       if (d1 !== d2) isDifferent = true;
+       if(isDifferent && newVal) newVal = Utilities.formatDate(new Date(newVal), Session.getScriptTimeZone(), "yyyy-MM-dd");
+    } 
+    else if (fieldKey === 'amount' || fieldKey === 'installments') {
+       if (parseFloat(newVal || 0) != parseFloat(oldVal || 0)) isDifferent = true;
+    }
+    else {
+       if (String(newVal || "") !== String(oldVal || "")) isDifferent = true;
+    }
+
+    if (isDifferent && newVal !== undefined) {
+      updates.push({ col: colIdx + 1, val: newVal }); // +1 for Sheet Column
+    }
+  }
+
+  // 2. Execute Updates
+  if (updates.length > 0) {
+    
+    // A. LOGGING
+    // We use .slice(2) to skip [ID, Timestamp] and align with headers [Date, User, Type...]
+    const logRow = [
+      Utilities.getUuid(),
+      recordId,
+      editTime,
+      form.user,
+      form.editReason || "Edit",
+      ...originalRow.slice(2) 
+    ];
+    
+    logSheet.appendRow(logRow);
+    const lastLogRaw = logSheet.getLastRow();
+    
+    // B. APPLY UPDATES & HIGHLIGHTS
+    updates.forEach(u => {
+       // 1. Update Transaction Sheet
+       transSheet.getRange(sheetRowIndex, u.col).setValue(u.val).setBackground("#ffff00");
+       
+       // 2. Highlight Old Value in Log Sheet
+       // Logic: Log Data starts at Col 6 (Index 1). 
+       // Date is Sheet Col 3. We want Date to land in Log Col 6.
+       // Formula: 3 + SheetCol = LogCol (e.g., 3 + 3 = 6)
+       logSheet.getRange(lastLogRaw, 3 + u.col).setBackground("#ffff00");
+    });
+
+    // C. Update Timestamp
+    transSheet.getRange(sheetRowIndex, 2).setValue(editTime);
+  }
 }
 
 /* -------------------------------------------------------------------------
@@ -270,7 +318,8 @@ function getRecordHistory(recordId) {
           type: row[7],
           category: row[9],
           amount: row[10],
-          description: row[11]
+          description: row[11],
+          files: row[12]
         }
       };
     })
