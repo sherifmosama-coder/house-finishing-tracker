@@ -79,6 +79,27 @@
       
       /* Form Control overrides for better touch */
       input, select, textarea { font-size: 16px !important; } /* Prevents iOS zoom on focus */
+
+      /* Floating Action Menu (Speed Dial) */
+      .fab-container { position: fixed; bottom: 20px; right: 20px; z-index: 1000; display: flex; flex-direction: column-reverse; align-items: flex-end; gap: 10px; }
+      .fab-main { width: 60px; height: 60px; border-radius: 50%; background: var(--primary-color); color: white; border: none; font-size: 24px; box-shadow: 0 4px 15px rgba(0,0,0,0.3); transition: transform 0.3s; }
+      .fab-action { width: 50px; height: 50px; border-radius: 50%; border: none; color: white; display: none; align-items: center; justify-content: center; font-size: 20px; box-shadow: 0 4px 10px rgba(0,0,0,0.2); transition: all 0.2s; position: relative; }
+      .fab-action:hover { transform: scale(1.1); }
+      .fab-label { position: absolute; right: 60px; background: white; color: #333; padding: 4px 10px; border-radius: 4px; font-size: 0.8rem; font-weight: bold; white-space: nowrap; box-shadow: 0 2px 5px rgba(0,0,0,0.1); }
+      
+      .fab-container.active .fab-action { display: flex; }
+      .fab-container.active .fab-main { transform: rotate(45deg) scale(0.5); background: #c0392b; }
+
+      /* Transaction Cards (Expense Modal) */
+      .trans-card { border: 1px solid #e0e0e0; border-radius: 8px; margin-bottom: 10px; overflow: hidden; background: white; }
+      .trans-card-header { padding: 10px 15px; background: #f8f9fa; display: flex; justify-content: space-between; align-items: center; cursor: pointer; }
+      .trans-card-body { padding: 15px; }
+      .trans-card.collapsed .trans-card-body { display: none; }
+      .trans-card.collapsed .trans-card-header { background: #fff; border-bottom: none; }
+      .trans-card-summary { font-size: 0.9rem; font-weight: 600; color: #555; }
+      
+      /* Sticky Footer for Expense Modal */
+      .modal-sticky-footer { position: sticky; bottom: 0; background: white; border-top: 1px solid #ddd; padding: 10px 15px; z-index: 10; box-shadow: 0 -2px 10px rgba(0,0,0,0.05); }
     </style>
   </head>
   <body>
@@ -99,7 +120,7 @@
         </div>
         <div class="mb-3">
           <label class="form-label">Password</label>
-          <input type="password" id="login-pass" class="form-control form-control-lg" placeholder="PIN">
+          <input type="password" id="login-pass" class="form-control form-control-lg" placeholder="PIN" inputmode="numeric" pattern="[0-9]*">
         </div>
         <button class="btn btn-primary w-100 btn-lg" onclick="handleLogin()">Login</button>
       </div>
@@ -231,108 +252,145 @@
         <div id="transaction-list"></div>
       </div>
 
-      <button class="fab" onclick="openModal()"><i class="fas fa-plus"></i></button>
+      <div class="fab-container" id="fabMenu">
+        <button class="fab-main" onclick="toggleFab()"><i class="fas fa-plus"></i></button>
+        
+        <button class="fab-action bg-success" onclick="openPaymentModal()">
+          <span class="fab-label">Inflow (Payment)</span>
+          <i class="fas fa-hand-holding-usd"></i>
+        </button>
+        
+        <button class="fab-action bg-danger" onclick="openExpenseModal()">
+          <span class="fab-label">Outflow (Expense)</span>
+          <i class="fas fa-file-invoice-dollar"></i>
+        </button>
+      </div>
 
-      <div class="modal fade" id="entryModal" tabindex="-1">
-        <div class="modal-dialog modal-dialog-centered">
+      <div class="modal fade" id="expenseModal" tabindex="-1">
+        <div class="modal-dialog modal-dialog-centered modal-lg modal-dialog-scrollable">
           <div class="modal-content">
-            <div class="modal-header">
-              <h5 class="modal-title" id="modalTitle">New Record</h5>
-              <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            <div class="modal-header bg-danger text-white">
+              <h5 class="modal-title"><i class="fas fa-file-invoice-dollar me-2"></i>Record Expenses</h5>
+              <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
             </div>
-            <div class="modal-body">
-              <form id="transForm">
-                <input type="hidden" id="recordId" name="recordId">
-                <input type="hidden" id="existingFileUrl" name="existingFileUrl">
-                <input type="hidden" id="existingFileId" name="existingFileId">
-
-                <div class="row g-2 mb-3">
-                  <div class="col-6">
-                    <label class="form-label"><i class="far fa-calendar-alt"></i> Date</label>
-                    <input type="date" class="form-control" id="date" name="date" required>
-                  </div>
-                  <div class="col-6">
-                    <label class="form-label"><i class="far fa-user"></i> User</label>
-                    <input type="text" class="form-control" id="user" name="user" readonly style="background-color: #e9ecef;">
-                  </div>
-                </div>
-
-                <div class="row g-2 mb-3">
-                  <div class="col-6">
-                    <label class="form-label">Type</label>
-                    <select class="form-select" id="type" name="type" required><option>Loading...</option></select>
-                  </div>
-                  <div class="col-6">
-                    <label class="form-label">Scope</label>
-                    <select class="form-select" id="scope" name="scope" required><option>Loading...</option></select>
-                  </div>
-                </div>
-
-                <div class="mb-3">
-                  <label class="form-label"><i class="far fa-credit-card"></i> Payment Method</label>
-                  <select class="form-select" id="paymentMethod" onchange="handleMethodChange()">
-                    <option value="Instapay">Instapay (Default)</option>
-                    <option value="Cash">Cash</option>
-                    <option value="Cheque">Cheque</option>
-                    <option value="Valu">Valu (Installments)</option>
-                  </select>
-                </div>
-
-                <div class="row g-2 mb-3" id="method-fields" style="display:none;">
-                  <div class="col-6">
-                    <label class="form-label" id="method-date-label">Date</label>
-                    <input type="date" class="form-control" id="methodDate">
-                  </div>
-                  <div class="col-6" id="installments-div" style="display:none;">
-                    <label class="form-label"># Months</label>
-                    <input type="number" class="form-control" id="installments" placeholder="e.g. 12">
-                  </div>
-                </div>
-
-                <div class="mb-3">
-                  <label class="form-label"><i class="fas fa-tag"></i> Category</label>
-                  <input class="form-control" list="categoryOptions" id="category" placeholder="Select or Type New..." required autocomplete="off">
-                  <datalist id="categoryOptions"></datalist>
-                </div>
-
-                <div class="mb-3">
-                  <label class="form-label"><i class="fas fa-coins"></i> Amount</label>
-                  <input type="number" class="form-control form-control-lg" id="amount" placeholder="0.00" step="0.01" required>
-                </div>
-
-                <div class="mb-3">
-                  <label class="form-label">Description</label>
-                  <textarea class="form-control" id="description" rows="2"></textarea>
-                </div>
-
-                <div class="mb-3">
-                  <label class="form-label"><i class="fas fa-paperclip"></i> Attachments</label>
-                  <div class="input-group">
-                    <input class="form-control" type="file" id="fileInput" accept="image/*,application/pdf" multiple onchange="handleNewFileSelect(this)">
-                  </div>
-                  <div class="form-text small text-muted">Click to add files. You can add multiple times.</div>
-                  
-                  <div id="newFilesList" class="mt-2"></div>
-                  
-                  <div id="existingFilesList" class="mt-2 border-top pt-2" style="display:none;"></div>
-                </div>
-
-                <div class="mb-3 bg-light p-2 rounded border" id="editReasonSection" style="display:none;">
-                  <label class="form-label text-muted small">Edit Reason</label>
-                  <input type="text" class="form-control" id="editReason">
-                </div>
-              </form>
-            </div>
-            <div class="modal-footer justify-content-between">
-              <button type="button" class="btn btn-outline-info" id="historyBtn" onclick="showHistory()" style="display:none;">
-                <i class="fas fa-history"></i> History
-              </button>
+            <div class="modal-body bg-light p-2" id="expenseCardsContainer">
+              </div>
+            <div class="modal-sticky-footer d-flex justify-content-between align-items-center">
               <div>
-                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
-                <button type="button" class="btn btn-primary" onclick="submitForm()" id="saveBtn">Save</button>
+                <small class="text-muted d-block">TOTAL</small>
+                <span class="fw-bold fs-5 text-danger" id="expenseTotal">0.00 EGP</span>
+              </div>
+              <div>
+                <button type="button" class="btn btn-outline-dark me-1" onclick="addExpenseCard()">
+                   <i class="fas fa-plus"></i> Add Another
+                </button>
+                <button type="button" class="btn btn-danger" onclick="submitExpenses()" id="btnSaveExpense">
+                   Save All
+                </button>
               </div>
             </div>
           </div>
+        </div>
+      </div>
+
+      <div class="modal fade" id="paymentModal" tabindex="-1">
+        <div class="modal-dialog modal-dialog-centered">
+          <div class="modal-content">
+            <div class="modal-header bg-success text-white">
+              <h5 class="modal-title"><i class="fas fa-hand-holding-usd me-2"></i>Record Payment</h5>
+              <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+              <form id="paymentForm">
+                <div class="mb-3">
+                   <label class="form-label">Date</label>
+                   <input type="date" class="form-control" id="payDate" required>
+                </div>
+                <div class="mb-3">
+                  <label class="form-label">Method</label>
+                  <select class="form-select" id="payMethod" required onchange="handlePayMethodChange()">
+                    <option value="Instapay">Instapay</option>
+                    <option value="Cash">Cash</option>
+                    <option value="Cheque">Cheque</option>
+                    <option value="Valu">Valu</option>
+                  </select>
+                </div>
+
+                <div class="row g-2 mb-3" id="pay-method-extras" style="display:none;">
+                   <div class="col-6">
+                      <label class="form-label small" id="pay-date-label">Date</label>
+                      <input type="date" class="form-control" id="payMethodDate">
+                   </div>
+                   <div class="col-6" id="pay-inst-wrapper" style="display:none;">
+                      <label class="form-label small"># Months</label>
+                      <input type="number" class="form-control" id="payInstallments" placeholder="12">
+                   </div>
+                </div>
+                
+                <div class="row g-2 mb-3">
+                  <div class="col-6">
+                    <label class="form-label small text-muted">Covering Expenses</label>
+                    <div class="input-group">
+                       <span class="input-group-text bg-white text-muted">EGP</span>
+                       <input type="number" class="form-control" id="payAmountExp" placeholder="0" oninput="calcPayTotal()" inputmode="decimal">
+                    </div>
+                  </div>
+                  <div class="col-6">
+                    <label class="form-label small text-muted">Covering Fees</label>
+                    <div class="input-group">
+                       <span class="input-group-text bg-white text-muted">EGP</span>
+                       <input type="number" class="form-control" id="payAmountFee" placeholder="0" oninput="calcPayTotal()" inputmode="decimal">
+                    </div>
+                  </div>
+                </div>
+
+                <div class="alert alert-success d-flex justify-content-between align-items-center p-2">
+                  <span class="small fw-bold">TOTAL INFLOW</span>
+                  <span class="fw-bold fs-5" id="payTotalDisplay">0.00</span>
+                </div>
+              </form>
+            </div>
+            <div class="modal-footer">
+              <button type="button" class="btn btn-success w-100" onclick="submitPayment()" id="btnSavePay">Save Payment</button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="modal fade" id="editModal" tabindex="-1">
+        <div class="modal-dialog modal-dialog-centered">
+           <div class="modal-content">
+             <div class="modal-header bg-primary text-white">
+               <h5 class="modal-title">Edit Record</h5>
+               <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+             </div>
+             <div class="modal-body">
+               <form id="editForm">
+                 <input type="hidden" id="editRecordId">
+                 <input type="hidden" id="editExistingUrl">
+                 <input type="hidden" id="editExistingId">
+                 
+                 <div class="row g-2 mb-2">
+                   <div class="col-6"><label>Date</label><input type="date" class="form-control" id="editDate"></div>
+                   <div class="col-6"><label>Category</label><input class="form-control" id="editCategory" list="categoryOptions"></div>
+                 </div>
+                 <div class="mb-2"><label>Amount</label><input type="number" class="form-control" id="editAmount"></div>
+                 <div class="mb-2"><label>Description</label><textarea class="form-control" id="editDesc"></textarea></div>
+                 
+                 <div class="mb-2">
+                    <label class="small"><i class="fas fa-paperclip"></i> Add Files</label>
+                    <input type="file" class="form-control form-control-sm" id="editFiles" multiple>
+                    <div id="editExistingFilesList" class="mt-1 small text-muted"></div>
+                 </div>
+
+                 <div class="mb-2 bg-light p-2 border"><label class="small">Edit Reason</label><input class="form-control" id="editReason"></div>
+               </form>
+             </div>
+             <div class="modal-footer justify-content-between">
+                <button class="btn btn-info btn-sm" id="btnHistory" onclick="openHistoryFromEdit()">History</button>
+                <button class="btn btn-primary" id="btnUpdateEdit" onclick="submitEdit()">Update</button>
+             </div>
+           </div>
         </div>
       </div>
       
@@ -352,6 +410,8 @@
       </div>
     </div>
 
+    <datalist id="categoryOptions"></datalist>
+
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
     
@@ -362,44 +422,21 @@
       let allTransactions = [];
       let displayedTransactions = [];
       let appSettings = {};
-      let entryModal;
-      let historyModal; // Add this
-      let currentUser = "";
       
-      // State for File Handling
-      let currentExistingFiles = []; // Stores objects {url, id}
-      let newFilesQueue = [];        // Stores actual File objects to be uploaded
+      // Modals
+      let expenseModal, paymentModal, editModal, historyModal;
+      let currentUser = "";
+      let expenseCardCount = 0;
 
       window.onload = function() {
-        entryModal = new bootstrap.Modal(document.getElementById('entryModal'));
-        historyModal = new bootstrap.Modal(document.getElementById('historyModal')); // Add this
+        expenseModal = new bootstrap.Modal(document.getElementById('expenseModal'));
+        paymentModal = new bootstrap.Modal(document.getElementById('paymentModal'));
+        editModal = new bootstrap.Modal(document.getElementById('editModal'));
+        if(document.getElementById('historyModal')) {
+           historyModal = new bootstrap.Modal(document.getElementById('historyModal'));
+        }
       };
 
-      // --- LOGIC: PAYMENT METHOD CHANGE ---
-      function handleMethodChange() {
-        const method = document.getElementById('paymentMethod').value;
-        const container = document.getElementById('method-fields');
-        const dateLabel = document.getElementById('method-date-label');
-        const instDiv = document.getElementById('installments-div');
-
-        if (method === 'Cheque') {
-          container.style.display = 'flex';
-          dateLabel.innerText = "Cheque Due Date";
-          instDiv.style.display = 'none';
-          document.getElementById('methodDate').required = true;
-          document.getElementById('installments').required = false;
-        } else if (method === 'Valu') {
-          container.style.display = 'flex';
-          dateLabel.innerText = "First Installment Date";
-          instDiv.style.display = 'block';
-          document.getElementById('methodDate').required = true;
-          document.getElementById('installments').required = true;
-        } else {
-          container.style.display = 'none';
-          document.getElementById('methodDate').required = false;
-          document.getElementById('installments').required = false;
-        }
-      }
 
       function handleLogin() {
         if (document.activeElement) document.activeElement.blur();
@@ -446,6 +483,438 @@
         document.getElementById('loading').style.display = 'none';
       }
 
+// --- FAB LOGIC ---
+      function toggleFab() {
+        document.getElementById('fabMenu').classList.toggle('active');
+      }
+
+      // --- EXPENSE MODAL LOGIC (Multi-Card) ---
+      function openExpenseModal() {
+        toggleFab();
+        document.getElementById('expenseCardsContainer').innerHTML = '';
+        expenseCardCount = 0;
+        addExpenseCard(); // Start with 1 card
+        updateExpenseTotal();
+        expenseModal.show();
+      }
+
+      function addExpenseCard() {
+        // Collapse previous cards
+        const existing = document.querySelectorAll('.trans-card');
+        existing.forEach(c => c.classList.add('collapsed'));
+
+        expenseCardCount++;
+        const id = expenseCardCount;
+        
+        // Prepare Category Options
+        const cats = appSettings['Category'] || [];
+        const catOptions = cats.map(c => `<option value="${c}">${c}</option>`).join('');
+        
+        const div = document.createElement('div');
+        div.className = 'trans-card';
+        div.id = `card-${id}`;
+        div.innerHTML = `
+          <div class="trans-card-header" onclick="toggleCard(${id})">
+            <span class="badge bg-danger me-2">#${id}</span>
+            <span class="trans-card-summary" id="summary-${id}">New Expense...</span>
+            <i class="fas fa-chevron-down text-muted"></i>
+          </div>
+          <div class="trans-card-body">
+            <div class="mb-3 bg-white p-2 border rounded">
+              <div class="form-check form-switch ms-1">
+                 <input class="form-check-input" type="checkbox" id="isFeeSettle-${id}" onchange="handleFeeToggle(${id})">
+                 <label class="form-check-label small fw-bold" for="isFeeSettle-${id}">Fee Settlement (No 10%)</label>
+              </div>
+            </div>
+
+            <div class="row g-2 mb-3">
+              <div class="col-6">
+                <label class="form-label small">Date</label>
+                <input type="date" class="form-control" id="date-${id}" value="${new Date().toISOString().split('T')[0]}">
+              </div>
+              <div class="col-6" id="scope-wrapper-${id}">
+                 <label class="form-label small">Scope</label>
+                 <select class="form-select" id="scope-${id}" onchange="handleScopeChange(${id})">
+                   <option value="Joint Balance">Joint (Normal)</option>
+                   <option value="Owner Only">Owner Only</option>
+                 </select>
+              </div>
+            </div>
+
+            <div class="mb-3" id="cat-wrapper-${id}">
+              <label class="form-label small">Category</label>
+              <div class="input-group">
+                <select class="form-select" id="cat-select-${id}" onchange="syncCat(${id}, 'select')">
+                   <option value="" disabled selected>Select...</option>
+                   ${catOptions}
+                </select>
+                
+                <input type="text" class="form-control" id="cat-input-${id}" oninput="syncCat(${id}, 'input')" style="display:none;" placeholder="Type new category...">
+                
+                <button class="btn btn-outline-secondary" type="button" onclick="toggleCatMode(${id})">
+                   <i class="fas fa-pencil-alt" id="cat-icon-${id}"></i>
+                </button>
+              </div>
+              <input type="hidden" id="cat-${id}">
+            </div>
+
+            <div id="method-wrapper-${id}" style="display:none;" class="mb-3 border-top pt-2">
+               <label class="form-label small text-primary">Owner Payment Method</label>
+               <select class="form-select mb-2" id="method-${id}" onchange="handleCardMethodChange(${id})">
+                  <option value="Cash">Cash</option>
+                  <option value="Instapay">Instapay</option>
+                  <option value="Credit Card">Credit Card</option>
+                  <option value="Cheque">Cheque</option>
+                  <option value="Valu">Valu</option>
+               </select>
+               
+               <div class="row g-2 bg-light p-2 rounded" id="method-extras-${id}" style="display:none;">
+                  <div class="col-6">
+                     <label class="form-label small text-muted" id="lbl-date-${id}">Due Date</label>
+                     <input type="date" class="form-control form-control-sm" id="date-method-${id}">
+                  </div>
+                  <div class="col-6" id="wrapper-inst-${id}" style="display:none;">
+                     <label class="form-label small text-muted"># Months</label>
+                     <input type="number" class="form-control form-control-sm" id="inst-${id}" placeholder="12">
+                  </div>
+               </div>
+            </div>
+
+            <div class="mb-3">
+              <label class="form-label small">Amount</label>
+              <input type="tel" class="form-control form-control-lg fw-bold" id="amt-${id}" placeholder="e.g. 50+20" oninput="updateCardSummary(${id})" onchange="formatMathField(this)">
+            </div>
+
+            <div class="mb-3">
+               <label class="form-label small">Description</label>
+               <input type="text" class="form-control" id="desc-${id}" oninput="updateCardSummary(${id})">
+            </div>
+
+            <div class="mb-3">
+               <label class="form-label small"><i class="fas fa-paperclip"></i> Attachments</label>
+               <input class="form-control form-control-sm" type="file" id="file-${id}" multiple>
+            </div>
+
+            <div class="text-end">
+               <button type="button" class="btn btn-sm btn-outline-danger" onclick="removeCard(${id})"><i class="fas fa-trash"></i> Remove</button>
+            </div>
+          </div>
+        `;
+        document.getElementById('expenseCardsContainer').appendChild(div);
+      }
+
+      // --- CATEGORY UI HELPERS ---
+      function toggleCatMode(id) {
+        const sel = document.getElementById(`cat-select-${id}`);
+        const inp = document.getElementById(`cat-input-${id}`);
+        const icon = document.getElementById(`cat-icon-${id}`);
+        
+        if (sel.style.display !== 'none') {
+          // Switch to Input (Type New)
+          sel.style.display = 'none';
+          inp.style.display = 'block';
+          inp.focus();
+          icon.className = 'fas fa-list'; // Icon becomes 'List'
+          // Pre-fill input with current selection to allow editing
+          inp.value = sel.value; 
+          syncCat(id, 'input');
+        } else {
+          // Switch to Select (List)
+          sel.style.display = 'block';
+          inp.style.display = 'none';
+          icon.className = 'fas fa-pencil-alt'; // Icon becomes 'Edit'
+          syncCat(id, 'select');
+        }
+      }
+
+      function syncCat(id, source) {
+        const master = document.getElementById(`cat-${id}`);
+        if (source === 'select') {
+           master.value = document.getElementById(`cat-select-${id}`).value;
+        } else {
+           master.value = document.getElementById(`cat-input-${id}`).value;
+        }
+      }
+
+      function toggleCard(id) {
+        document.getElementById(`card-${id}`).classList.toggle('collapsed');
+      }
+
+      function handleScopeChange(id) {
+        const val = document.getElementById(`scope-${id}`).value;
+        const methodDiv = document.getElementById(`method-wrapper-${id}`);
+        methodDiv.style.display = (val === 'Owner Only') ? 'block' : 'none';
+      }
+
+      function handleFeeToggle(id) {
+        const isFee = document.getElementById(`isFeeSettle-${id}`).checked;
+         const catDiv = document.getElementById(`cat-wrapper-${id}`);
+         const scopeDiv = document.getElementById(`scope-wrapper-${id}`);
+         const scopeInput = document.getElementById(`scope-${id}`);
+         const methodDiv = document.getElementById(`method-wrapper-${id}`);
+
+         if(isFee) {
+           catDiv.style.display = 'none';
+           scopeDiv.style.display = 'none';
+           methodDiv.style.display = 'none'; 
+           document.getElementById(`cat-${id}`).value = 'Fee Settlement'; 
+           scopeInput.value = 'Joint Balance';
+        } else {
+           catDiv.style.display = 'block';
+           scopeDiv.style.display = 'block';
+           document.getElementById(`cat-${id}`).value = '';
+           handleScopeChange(id); 
+        }
+      }
+
+      // --- METHOD CHANGE LOGIC ---
+
+      function handlePayMethodChange() {
+         const method = document.getElementById('payMethod').value;
+         toggleMethodFields(method, 'pay-method-extras', 'pay-date-label', 'pay-inst-wrapper', 'payMethodDate', 'payInstallments');
+      }
+
+      function handleCardMethodChange(id) {
+         const method = document.getElementById(`method-${id}`).value;
+         toggleMethodFields(method, `method-extras-${id}`, `lbl-date-${id}`, `wrapper-inst-${id}`, `date-method-${id}`, `inst-${id}`);
+      }
+
+      function toggleMethodFields(method, containerId, labelId, instWrapperId, dateInputId, instInputId) {
+         const container = document.getElementById(containerId);
+         const label = document.getElementById(labelId);
+         const instWrapper = document.getElementById(instWrapperId);
+         const dateInput = document.getElementById(dateInputId);
+         const instInput = document.getElementById(instInputId);
+
+         if (method === 'Cheque') {
+            container.style.display = 'flex';
+            label.innerText = "Cheque Due Date";
+            instWrapper.style.display = 'none';
+            dateInput.required = true;
+            if(instInput) instInput.required = false;
+         } else if (method === 'Valu') {
+            container.style.display = 'flex';
+            label.innerText = "First Installment";
+            instWrapper.style.display = 'block';
+            dateInput.required = true;
+            if(instInput) instInput.required = true;
+         } else {
+            container.style.display = 'none';
+            dateInput.required = false;
+            if(instInput) instInput.required = false;
+         }
+      }
+      function updateCardSummary(id) {
+        const rawAmt = document.getElementById(`amt-${id}`).value;
+        const calculated = safeEvaluate(rawAmt);
+        const desc = document.getElementById(`desc-${id}`).value;
+        
+        // Show the calculated value in the summary header even if formula is still in input
+        document.getElementById(`summary-${id}`).innerText = 
+           `${calculated ? calculated + ' EGP' : '0 EGP'} - ${desc || 'No desc'}`;
+        updateExpenseTotal();
+      }
+
+      function updateExpenseTotal() {
+        let total = 0;
+        document.querySelectorAll('[id^="amt-"]').forEach(input => {
+           total += safeEvaluate(input.value); // Use safeEvaluate instead of parseFloat
+        });
+        document.getElementById('expenseTotal').innerText = formatCurrency(total);
+      }
+
+      function removeCard(id) {
+        document.getElementById(`card-${id}`).remove();
+        updateExpenseTotal();
+      }
+
+      async function submitExpenses() {
+        const cards = document.querySelectorAll('.trans-card');
+        if(cards.length === 0) return;
+
+        const btn = document.getElementById('btnSaveExpense');
+        btn.disabled = true; btn.innerText = "Processing...";
+
+        const transactions = [];
+
+        for (const card of cards) {
+            const id = card.id.split('-')[1];
+            const fileInput = document.getElementById(`file-${id}`);
+            
+            let fileData = [];
+            if(fileInput.files.length > 0) {
+                fileData = await Promise.all(Array.from(fileInput.files).map(f => readFile(f)));
+            }
+
+            transactions.push({
+                date: document.getElementById(`date-${id}`).value,
+                type: 'Expense',
+                scope: document.getElementById(`scope-${id}`).value,
+                category: document.getElementById(`cat-${id}`).value || 'General',
+                amount: safeEvaluate(document.getElementById(`amt-${id}`).value), // Evaluate before sending
+                description: document.getElementById(`desc-${id}`).value,
+                paymentMethod: document.getElementById(`method-${id}`)?.value,
+                methodDate: document.getElementById(`date-method-${id}`)?.value || "",
+                installments: document.getElementById(`inst-${id}`)?.value || "",
+                user: currentUser,
+                files: fileData
+            });
+        }
+
+        google.script.run
+          .withSuccessHandler((res) => {
+             expenseModal.hide();
+             Swal.fire('Saved', res.message, 'success');
+             loadData();
+             btn.disabled = false; btn.innerText = "Save All";
+          })
+          .withFailureHandler(showError)
+          .processBatch({ transactions: transactions });
+      }
+
+      // --- PAYMENT MODAL LOGIC ---
+      function openPaymentModal() {
+         toggleFab();
+         document.getElementById('paymentForm').reset();
+         document.getElementById('payDate').valueAsDate = new Date();
+         document.getElementById('payTotalDisplay').innerText = "0.00";
+         paymentModal.show();
+      }
+
+      function calcPayTotal() {
+         const e = parseFloat(document.getElementById('payAmountExp').value) || 0;
+         const f = parseFloat(document.getElementById('payAmountFee').value) || 0;
+         document.getElementById('payTotalDisplay').innerText = formatCurrency(e + f);
+      }
+
+      function submitPayment() {
+         const date = document.getElementById('payDate').value;
+         const method = document.getElementById('payMethod').value;
+         const expAmt = document.getElementById('payAmountExp').value;
+         const feeAmt = document.getElementById('payAmountFee').value;
+         
+         // Capture Extras
+         const methodDate = document.getElementById('payMethodDate').value;
+         const installments = document.getElementById('payInstallments').value;
+
+         const transactions = [];
+         
+         if (expAmt > 0) {
+            transactions.push({
+               date: date, type: 'Payment', scope: 'Joint Balance', 
+               category: 'Deposit', amount: expAmt, description: 'Payment for Expenses',
+               paymentMethod: method, methodDate: methodDate, installments: installments, user: currentUser
+            });
+         }
+         if (feeAmt > 0) {
+            transactions.push({
+               date: date, type: 'Payment', scope: 'Joint Balance', 
+               category: 'Fee Deposit', amount: feeAmt, description: 'Payment for Fees',
+               paymentMethod: method, methodDate: methodDate, installments: installments, user: currentUser
+            });
+         }
+
+         if(transactions.length === 0) {
+            Swal.fire('Error', 'Please enter an amount', 'warning'); return;
+         }
+
+         document.getElementById('btnSavePay').disabled = true;
+         google.script.run.withSuccessHandler(() => {
+            paymentModal.hide();
+            loadData();
+            document.getElementById('btnSavePay').disabled = false;
+         }).processBatch({ transactions: transactions });
+      }
+
+      // --- EDIT MODAL LOGIC (Legacy Single Mode) ---
+      function openEditModal(id) {
+         const t = allTransactions.find(x => x.ID === id);
+         if(!t) return;
+         
+         document.getElementById('editRecordId').value = t.ID;
+         document.getElementById('editDate').value = t.Date;
+         document.getElementById('editCategory').value = t.Category;
+         document.getElementById('editAmount').value = t.Amount;
+         document.getElementById('editDesc').value = t.Description;
+         document.getElementById('editReason').value = '';
+         document.getElementById('editExistingUrl').value = t.File_URL || '';
+         document.getElementById('editExistingId').value = t.File_ID || '';
+         document.getElementById('editFiles').value = '';
+
+         // Handle Permissions
+         const isOwner = t.User === currentUser;
+         const btn = document.getElementById('btnUpdateEdit');
+         
+         // Disable fields if not owner
+         const fields = ['editDate','editCategory','editAmount','editDesc','editFiles','editReason'];
+         fields.forEach(f => document.getElementById(f).disabled = !isOwner);
+         btn.style.display = isOwner ? 'block' : 'none';
+
+         // Render existing files
+         const list = document.getElementById('editExistingFilesList');
+         list.innerHTML = '';
+         if(t.File_URL) {
+            const urls = t.File_URL.split(',');
+            const ids = (t.File_ID || "").split(',');
+            
+            list.innerHTML = '<div class="small fw-bold text-muted mb-1">Attached Files:</div>';
+            urls.forEach((u, i) => {
+               if(u.trim()) {
+                   const div = document.createElement('div');
+                   div.className = "mb-1";
+                   div.innerHTML = `<a href="${u}" target="_blank" class="text-decoration-none text-primary"><i class="fas fa-external-link-alt me-1"></i> View Attachment ${i+1}</a>`;
+                   list.appendChild(div);
+               }
+            });
+         }
+
+         editModal.show();
+      }
+
+      function openHistoryFromEdit() {
+         const id = document.getElementById('editRecordId').value;
+         document.getElementById('recordId').value = id; // Hook for history function
+         showHistory();
+      }
+
+      async function submitEdit() {
+         const id = document.getElementById('editRecordId').value;
+         const filesInput = document.getElementById('editFiles');
+         
+         let fileData = [];
+         if(filesInput.files.length > 0) {
+             fileData = await Promise.all(Array.from(filesInput.files).map(f => readFile(f)));
+         }
+         
+         const payload = {
+            recordId: id,
+            date: document.getElementById('editDate').value,
+            category: document.getElementById('editCategory').value,
+            amount: document.getElementById('editAmount').value,
+            description: document.getElementById('editDesc').value,
+            editReason: document.getElementById('editReason').value,
+            user: currentUser,
+            existingFileUrl: document.getElementById('editExistingUrl').value,
+            existingFileId: document.getElementById('editExistingId').value,
+            files: fileData
+         };
+
+         google.script.run.withSuccessHandler((res) => {
+            editModal.hide();
+            Swal.fire('Updated', res.message, 'success');
+            loadData();
+         }).processForm(payload); // Calls legacy edit backend
+      }
+
+      function readFile(file) {
+        return new Promise((resolve, reject) => {
+            const reader = new FileReader();
+            reader.onload = e => resolve({ data: e.target.result, name: file.name });
+            reader.onerror = reject;
+            reader.readAsDataURL(file);
+        });
+      }
+
       // --- MULTI-FILE HANDLING ---
       
       function renderExistingFiles() {
@@ -480,43 +949,7 @@
         renderExistingFiles();
       }
 
-      // --- NEW FILE QUEUE LOGIC ---
       
-      function handleNewFileSelect(input) {
-        if (input.files && input.files.length > 0) {
-            Array.from(input.files).forEach(file => {
-                newFilesQueue.push(file);
-            });
-            renderNewFiles();
-        }
-        // Reset input so same file can be selected again if needed
-        input.value = ''; 
-      }
-
-      function renderNewFiles() {
-        const container = document.getElementById('newFilesList');
-        container.innerHTML = '';
-        
-        if (newFilesQueue.length > 0) {
-            container.innerHTML = '<div class="small text-muted mb-1">Ready to Upload:</div>';
-        }
-
-        newFilesQueue.forEach((file, index) => {
-            const div = document.createElement('div');
-            div.className = "d-flex align-items-center justify-content-between bg-white p-2 mb-1 rounded border border-primary";
-            div.innerHTML = `
-                <span class="text-truncate text-primary" style="max-width: 85%;">
-                    <i class="fas fa-plus-circle me-1"></i> ${file.name} 
-                    <small class="text-muted ms-1">(${formatBytes(file.size)})</small>
-                </span>
-                <button type="button" class="btn btn-sm btn-outline-danger border-0" onclick="removeNewFile(${index})">
-                    <i class="fas fa-times"></i>
-                </button>
-            `;
-            container.appendChild(div);
-        });
-      }
-
       function removeNewFile(index) {
         newFilesQueue.splice(index, 1);
         renderNewFiles();
@@ -529,165 +962,6 @@
         const sizes = ['B', 'KB', 'MB', 'GB'];
         const i = Math.floor(Math.log(bytes) / Math.log(k));
         return `${parseFloat((bytes / Math.pow(k, i)).toFixed(dm))} ${sizes[i]}`;
-      }
-
-      // --- MODAL LOGIC ---
-
-      function openModal(id = null) {
-        // 1. Reset Form & UI
-        document.getElementById('transForm').reset();
-        // REMOVED: document.getElementById('currentFileLink').innerHTML = ''; (Old Element)
-        
-        document.getElementById('recordId').value = '';
-        document.getElementById('existingFileUrl').value = '';
-        document.getElementById('existingFileId').value = '';
-        document.getElementById('date').valueAsDate = new Date();
-        document.getElementById('user').value = currentUser;
-        document.getElementById('editReasonSection').style.display = 'none';
-        
-        // Reset File Arrays
-        currentExistingFiles = [];
-        newFilesQueue = [];
-        renderExistingFiles();
-        renderNewFiles();
-        document.getElementById('fileInput').value = "";
-
-        // Reset Method
-        document.getElementById('paymentMethod').value = 'Instapay';
-        handleMethodChange();
-
-        // 2. Default State: Editable (for New Records)
-        let isReadOnly = false;
-        document.getElementById('modalTitle').innerText = 'New Record';
-        document.getElementById('saveBtn').style.display = 'block';
-        document.getElementById('historyBtn').style.display = 'none'; // Hide history by default
-        toggleFormInputs(false); // Enable inputs
-        
-        if (id) {
-          document.getElementById('historyBtn').style.display = 'block'; // Show if editing
-          const t = allTransactions.find(x => x.ID === id);
-          if (!t) return;
-
-          // 3. EDIT MODE LOGIC
-          
-          // Check Permissions: Can currentUser edit this?
-          if (t.User !== currentUser) {
-            isReadOnly = true;
-            document.getElementById('modalTitle').innerText = 'View Record (Read-Only)';
-            document.getElementById('saveBtn').style.display = 'none';
-          } else {
-            document.getElementById('modalTitle').innerText = 'Edit Record';
-          }
-
-          // Populate Fields
-          document.getElementById('recordId').value = t.ID;
-          document.getElementById('date').value = t.Date;
-          document.getElementById('user').value = t.User; // Show original creator
-          document.getElementById('type').value = t.Type;
-          document.getElementById('scope').value = t.Impact_Scope;
-          document.getElementById('category').value = t.Category;
-          document.getElementById('amount').value = t.Amount;
-          document.getElementById('description').value = t.Description;
-          
-          // Populate Files
-          if (t.File_URL && t.File_ID) {
-            const urls = t.File_URL.split(',');
-            const ids = t.File_ID.split(',');
-            urls.forEach((u, i) => {
-                if(u && u.trim() !== "") {
-                    currentExistingFiles.push({ url: u, id: ids[i] });
-                }
-            });
-            renderExistingFiles();
-          }
-
-          if (t.Payment_Method) {
-            document.getElementById('paymentMethod').value = t.Payment_Method;
-            handleMethodChange();
-            document.getElementById('methodDate').value = t.Method_Date || '';
-            document.getElementById('installments').value = t.Installments || '';
-          }
-
-          // Show Edit Reason only if editable
-          if (!isReadOnly) {
-            document.getElementById('editReasonSection').style.display = 'block';
-          }
-          
-          // Apply Read-Only State to Inputs
-          toggleFormInputs(isReadOnly);
-        }
-        
-        entryModal.show();
-      }
-
-      // Helper to Disable/Enable all form fields
-      function toggleFormInputs(disabled) {
-        const inputs = document.querySelectorAll('#transForm input, #transForm select, #transForm textarea, #transForm button');
-        inputs.forEach(el => {
-            // Don't disable the "Cancel" button in the footer
-            if (el.type !== 'button' && el.type !== 'submit') { 
-                el.disabled = disabled;
-            }
-        });
-        
-        // Handle the File Delete buttons specifically
-        const deleteBtns = document.querySelectorAll('#existingFilesList button');
-        deleteBtns.forEach(btn => btn.disabled = disabled);
-      }
-
-      function submitForm() {
-        const form = document.getElementById('transForm');
-        if (!form.checkValidity()) { form.reportValidity(); return; }
-
-        const btn = document.getElementById('saveBtn');
-        btn.disabled = true;
-        btn.innerText = 'Saving...';
-
-        // Prepare the base object
-        const formData = {
-          recordId: document.getElementById('recordId').value,
-          date: document.getElementById('date').value,
-          user: currentUser,
-          type: document.getElementById('type').value,
-          scope: document.getElementById('scope').value,
-          category: document.getElementById('category').value,
-          amount: document.getElementById('amount').value,
-          description: document.getElementById('description').value,
-          editReason: document.getElementById('editReason').value,
-          paymentMethod: document.getElementById('paymentMethod').value,
-          methodDate: document.getElementById('methodDate').value,
-          installments: document.getElementById('installments').value,
-          // Send remaining existing files as strings
-          existingFileUrl: currentExistingFiles.map(f => f.url).join(','),
-          existingFileId: currentExistingFiles.map(f => f.id).join(',')
-        };
-
-        // Handle NEW Files (Promise Loop)
-        // Use the queue instead of the input element directly
-        if (newFilesQueue.length > 0) {
-            const filePromises = newFilesQueue.map(file => {
-                return new Promise((resolve, reject) => {
-                    const reader = new FileReader();
-                    reader.onload = e => resolve({ data: e.target.result, name: file.name });
-                    reader.onerror = error => reject(error);
-                    reader.readAsDataURL(file);
-                });
-            });
-
-            Promise.all(filePromises)
-                .then(filesData => {
-                    formData.files = filesData; // Send array of {data, name}
-                    sendToBackend(formData);
-                })
-                .catch(error => {
-                    showError("File read error: " + error);
-                    btn.disabled = false;
-                    btn.innerText = 'Save';
-                });
-        } else {
-            // No new files
-            sendToBackend(formData);
-        }
       }
 
       // --- HISTORY LOGIC ---
@@ -732,19 +1006,6 @@
           `;
           container.innerHTML += html;
         });
-      }
-
-      function sendToBackend(data) {
-        google.script.run
-          .withSuccessHandler((response) => {
-            entryModal.hide();
-            Swal.fire('Success', response.message, 'success');
-            loadData();
-            document.getElementById('saveBtn').disabled = false;
-            document.getElementById('saveBtn').innerText = 'Save';
-          })
-          .withFailureHandler(showError)
-          .processForm(data);
       }
 
       // --- UTILS & RENDER ---
@@ -826,7 +1087,7 @@
           else if (t.Payment_Method === 'Valu') methodIcon = '<i class="fas fa-calendar-check text-info" title="Valu"></i>';
 
           const html = `
-            <div class="trans-item ${typeClass}" onclick="openModal('${t.ID}')">
+            <div class="trans-item ${typeClass}" onclick="openEditModal('${t.ID}')">
               <div class="d-flex justify-content-between">
                 <div>
                   <span class="trans-date">${t.Date}</span>
@@ -852,21 +1113,18 @@
       }
       
       function populateDropdowns() {
-        fillSelect('type', 'Type');
-        fillSelect('scope', 'Scope');
-        const dl = document.getElementById('categoryOptions');
-        dl.innerHTML = '';
-        (appSettings['Category'] || []).forEach(opt => {
-          const el = document.createElement('option');
-          el.value = opt;
-          dl.appendChild(el);
-        });
-        const fUser = document.getElementById('filter-user');
-        const fCat = document.getElementById('filter-cat');
-        while(fUser.options.length > 1) fUser.remove(1);
-        while(fCat.options.length > 1) fCat.remove(1);
-        ["Sherif", "Mahfouz", "Nada"].forEach(u => fUser.add(new Option(u, u)));
-        (appSettings['Category'] || []).forEach(c => fCat.add(new Option(c, c)));
+        // Use brackets ['Category'] to match the exact Sheet header/key
+        const categories = appSettings['Category'] || []; 
+        
+        const catList = document.getElementById('categoryOptions');
+        if (catList) {
+            catList.innerHTML = '';
+            categories.forEach(c => {
+               const opt = document.createElement('option');
+               opt.value = c;
+               catList.appendChild(opt);
+            });
+        }
       }
 
       function fillSelect(id, key) {
@@ -908,7 +1166,12 @@
           } 
           else if (t.Type.includes('Expense')) {
              totalAllSpent += amt;
-             if (t.Impact_Scope === 'Joint Balance') totalJointSpent += amt;
+             if (t.Impact_Scope === 'Joint Balance') {
+                 // LOGIC CHANGE: Exclude Fee Settlements from 10% Fee Base
+                 if (t.Category !== 'Fee Settlement') {
+                    totalJointSpent += amt;
+                 }
+             }
           }
         });
         const fees = totalJointSpent * 0.10;
@@ -963,6 +1226,35 @@
         if (document.activeElement) document.activeElement.blur();
         document.getElementById('loading').style.display = 'none';
         Swal.fire('Error', e.message || e, 'error'); 
+      }
+
+      // --- HELPER: MATH EVALUATOR ---
+      function safeEvaluate(expression) {
+        if (!expression) return 0;
+        try {
+           // Allow digits, decimal points, and math operators (+ - * /)
+           const clean = expression.toString().replace(/[^0-9+\-*/. ]/g, '');
+           if (!clean) return 0;
+           // robust evaluation
+           const result = new Function('return ' + clean)();
+           return isFinite(result) ? parseFloat(result) : 0;
+        } catch (e) {
+           return 0;
+        }
+      }
+      
+      function formatMathField(input) {
+         const val = input.value;
+         if(!val) return;
+         const result = safeEvaluate(val);
+         if(result !== 0) {
+            input.value = result.toFixed(2).replace(/\.00$/, ''); // Clean formatting
+            // Trigger update to ensure totals are synced
+            if(input.id.startsWith('amt-')) {
+               const id = input.id.split('-')[1];
+               updateCardSummary(id);
+            }
+         }
       }
     </script>
   </body>
