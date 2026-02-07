@@ -64,11 +64,26 @@
       .liability-amount { font-weight: 700; color: #333; }
       .due-soon { border-left-color: var(--danger-color); background-color: #fff5f5; }
       
+      /* Tabs */
+      .nav-pills .nav-link { color: #6c757d; font-weight: 600; border-radius: 20px; font-size: 0.9rem; padding: 6px 12px; transition: all 0.2s; }
+      .nav-pills .nav-link:hover { background-color: #e9ecef; }
+      .nav-pills .nav-link.active { background-color: var(--primary-color); color: white; box-shadow: 0 2px 5px rgba(0,0,0,0.2); }
+      .nav-pills .nav-link.active#tab-btn-in { background-color: var(--success-color); }
+      .nav-pills .nav-link.active#tab-btn-out { background-color: var(--danger-color); }
+
       /* Transaction List */
-      .trans-item { background: white; border-radius: 10px; padding: 15px; margin-bottom: 10px; border-left: 5px solid #ccc; box-shadow: 0 2px 4px rgba(0,0,0,0.03); cursor: pointer; }
+      .trans-item { background: white; border-radius: 10px; padding: 12px 15px; margin-bottom: 10px; border-left: 5px solid #ccc; box-shadow: 0 2px 4px rgba(0,0,0,0.03); cursor: pointer; transition: transform 0.1s; }
+      .trans-item:active { transform: scale(0.99); }
+      
+      /* Type Specifics */
       .trans-item.type-payment { border-left-color: var(--success-color); }
       .trans-item.type-expense { border-left-color: var(--danger-color); }
-      .trans-item.scope-owner { border-left-color: #95a5a6; opacity: 0.8; }
+      
+      .amount-in { color: var(--success-color); font-weight: 700; }
+      .amount-out { color: var(--danger-color); font-weight: 700; }
+
+      /* Owner Scope: Dimmed, No Strikethrough */
+      .trans-item.scope-owner { opacity: 0.5; background-color: #fcfcfc; border-left-color: #bdc3c7; }
       
       .fab { position: fixed; bottom: 20px; right: 20px; width: 60px; height: 60px; background: var(--accent-color); color: white; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 24px; box-shadow: 0 4px 15px rgba(52, 152, 219, 0.4); border: none; z-index: 1000; }
       
@@ -100,6 +115,22 @@
       
       /* Sticky Footer for Expense Modal */
       .modal-sticky-footer { position: sticky; bottom: 0; background: white; border-top: 1px solid #ddd; padding: 10px 15px; z-index: 10; box-shadow: 0 -2px 10px rgba(0,0,0,0.05); }
+
+      /* --- REPORT PRINT STYLES --- */
+      #printable-report { display: none; background: white; color: black; padding: 20px; }
+      .rep-header { text-align: center; margin-bottom: 20px; border-bottom: 2px solid #333; padding-bottom: 10px; }
+      .rep-section-title { font-size: 1.1rem; font-weight: bold; margin-top: 20px; margin-bottom: 10px; border-left: 4px solid #333; padding-left: 10px; background: #f0f0f0; padding: 5px; }
+      .rep-table { width: 100%; border-collapse: collapse; font-size: 0.8rem; margin-bottom: 15px; }
+      .rep-table th { border-bottom: 1px solid #000; text-align: left; padding: 5px; font-weight: bold; }
+      .rep-table td { border-bottom: 1px solid #ddd; padding: 5px; vertical-align: top; }
+      .rep-total-row td { border-top: 2px solid #333; font-weight: bold; background: #fafafa; }
+      
+      @media print {
+         body * { visibility: hidden; }
+         #printable-report, #printable-report * { visibility: visible; }
+         #printable-report { position: absolute; left: 0; top: 0; width: 100%; display: block !important; }
+         .no-print { display: none !important; }
+      }
     </style>
   </head>
   <body>
@@ -144,7 +175,7 @@
         
         <div id="liabilities-section" class="mb-3" style="display:none;">
           <button class="btn btn-outline-secondary w-100 text-start d-flex justify-content-between align-items-center mb-2" type="button" data-bs-toggle="collapse" data-bs-target="#liabilityCollapse">
-            <span><i class="fas fa-exclamation-circle text-warning me-2"></i> Upcoming Liabilities</span>
+            <span id="liability-header-title"><i class="fas fa-exclamation-circle text-warning me-2"></i> Upcoming Liabilities</span>
             <i class="fas fa-chevron-down small"></i>
           </button>
           
@@ -152,7 +183,7 @@
             <div class="card card-body bg-light border-0 p-2">
               <div class="card bg-white mb-2 border-0 shadow-sm">
                 <div class="card-body py-2 d-flex justify-content-between align-items-center">
-                  <div class="small"><i class="fas fa-calendar-alt text-primary me-2"></i>Valu Monthly</div>
+                  <div class="small" id="valu-label"><i class="fas fa-calendar-alt text-primary me-2"></i>Valu Monthly</div>
                   <div class="fw-bold" id="monthly-valu-total">0 EGP</div>
                 </div>
               </div>
@@ -211,30 +242,69 @@
             </h2>
             <div id="collapseFilter" class="accordion-collapse collapse" data-bs-parent="#filterAccordion">
               <div class="accordion-body bg-light">
-                <div class="row g-2">
+                <div class="row g-2 mb-2">
+                  <div class="col-4">
+                    <label class="small fw-bold">From</label>
+                    <input type="date" id="filter-start" class="form-control form-control-sm">
+                  </div>
+                  <div class="col-4">
+                    <label class="small fw-bold">To</label>
+                    <input type="date" id="filter-end" class="form-control form-control-sm">
+                  </div>
+                  <div class="col-4">
+                    <label class="small fw-bold">User</label>
+                    <select id="filter-user" class="form-select form-select-sm"><option value="">All</option></select>
+                  </div>
+                </div>
+
+                <div class="row g-2 mb-2">
                   <div class="col-6">
-                    <label class="small">Start</label>
-                    <input type="date" id="filter-start" class="form-control form-control-sm" onchange="applyFilters()">
+                    <label class="small fw-bold">Type</label>
+                    <select id="filter-type" class="form-select form-select-sm" onchange="toggleFilterCategory()">
+                      <option value="All">All Transactions</option>
+                      <option value="Payment">Payments Only</option>
+                      <option value="Expense">Expenses Only</option>
+                      <option value="Fees">Fees Only</option>
+                    </select>
+                  </div>
+                  <div class="col-6" id="filter-cat-wrapper">
+                    <label class="small fw-bold">Category</label>
+                    <select id="filter-cat" class="form-select form-select-sm"><option value="">All</option></select>
+                  </div>
+                </div>
+
+                <div class="row g-2 mb-3 bg-white p-2 rounded border mx-0">
+                  <div class="col-6">
+                    <label class="small text-muted"><i class="fas fa-sort me-1"></i>Sort By</label>
+                    <select id="filter-sort" class="form-select form-select-sm border-0 bg-light">
+                      <option value="date-desc">Date (Newest)</option>
+                      <option value="date-asc">Date (Oldest)</option>
+                      <option value="amt-desc">Amount (High)</option>
+                      <option value="amt-asc">Amount (Low)</option>
+                    </select>
                   </div>
                   <div class="col-6">
-                    <label class="small">End</label>
-                    <input type="date" id="filter-end" class="form-control form-control-sm" onchange="applyFilters()">
+                    <label class="small text-muted"><i class="fas fa-layer-group me-1"></i>Group By</label>
+                    <select id="filter-group" class="form-select form-select-sm border-0 bg-light">
+                      <option value="none">None (List)</option>
+                      <option value="User">User</option>
+                      <option value="Category">Category</option>
+                      <option value="Month">Month</option>
+                    </select>
                   </div>
-                  <div class="col-6">
-                    <label class="small">User</label>
-                    <select id="filter-user" class="form-select form-select-sm" onchange="applyFilters()"><option value="">All</option></select>
-                  </div>
-                  <div class="col-6">
-                    <label class="small">Category</label>
-                    <select id="filter-cat" class="form-select form-select-sm" onchange="applyFilters()"><option value="">All</option></select>
-                  </div>
-                  <div class="col-12 mt-2">
-                    <button class="btn btn-sm btn-dark w-100" onclick="window.print()"><i class="fas fa-print me-1"></i> Print Report</button>
-                    <button class="btn btn-sm btn-outline-secondary w-100 mt-1" onclick="resetFilters()">Clear Filters</button>
-                  </div>
+                </div>
+
+                <div class="d-flex gap-2">
+                   <button class="btn btn-sm btn-primary flex-grow-1" onclick="applyFilters()"><i class="fas fa-search me-1"></i> Apply</button>
+                   <button class="btn btn-sm btn-dark flex-grow-1" onclick="generateAndPrintReport()"><i class="fas fa-print me-1"></i> Print Report</button>
+                   <button class="btn btn-sm btn-outline-secondary" onclick="resetFilters()"><i class="fas fa-undo"></i></button>
                 </div>
               </div>
             </div>
+          </div>
+        </div>
+
+        <div id="printable-report"></div>
           </div>
         </div>
 
@@ -245,11 +315,33 @@
           </div>
         </div>
 
-        <div class="d-flex justify-content-between align-items-center mb-2">
-          <h6 class="text-muted mb-0">Records <span class="badge bg-secondary ms-1" id="record-count">0</span></h6>
-        </div>
+        <div class="row g-2">
+          <div class="col-12">
+            
+            <ul class="nav nav-pills nav-fill mb-3 bg-white p-1 rounded border" role="tablist">
+              <li class="nav-item" role="presentation">
+                <button class="nav-link active" id="tab-btn-all" onclick="setTab('all')">All</button>
+              </li>
+              <li class="nav-item" role="presentation">
+                <button class="nav-link" id="tab-btn-in" onclick="setTab('inflow')">
+                  <i class="fas fa-hand-holding-usd me-1"></i> Payments
+                </button>
+              </li>
+              <li class="nav-item" role="presentation">
+                <button class="nav-link" id="tab-btn-out" onclick="setTab('outflow')">
+                  <i class="fas fa-file-invoice-dollar me-1"></i> Expenses / Cost+
+                </button>
+              </li>
+            </ul>
 
-        <div id="transaction-list"></div>
+            <div class="d-flex justify-content-between align-items-center mb-2">
+              <h6 class="text-muted mb-0">Records <span class="badge bg-secondary ms-1" id="record-count">0</span></h6>
+            </div>
+
+            <div id="transaction-list"></div>
+            
+          </div>
+        </div>
       </div>
 
       <div class="fab-container" id="fabMenu">
@@ -344,6 +436,11 @@
                   </div>
                 </div>
 
+                <div class="mb-3">
+                   <label class="form-label small"><i class="fas fa-paperclip"></i> Attachments</label>
+                   <input class="form-control form-control-sm" type="file" id="payFiles" multiple>
+                </div>
+
                 <div class="alert alert-success d-flex justify-content-between align-items-center p-2">
                   <span class="small fw-bold">TOTAL INFLOW</span>
                   <span class="fw-bold fs-5" id="payTotalDisplay">0.00</span>
@@ -376,6 +473,27 @@
                  </div>
                  <div class="mb-2"><label>Amount</label><input type="number" class="form-control" id="editAmount"></div>
                  <div class="mb-2"><label>Description</label><textarea class="form-control" id="editDesc"></textarea></div>
+
+                 <div class="mb-2 border-top pt-2">
+                    <label class="small text-muted">Payment Method</label>
+                    <select class="form-select form-select-sm" id="editMethod" onchange="toggleEditMethodFields()">
+                       <option value="">None</option>
+                       <option value="Cash">Cash</option>
+                       <option value="Instapay">Instapay</option>
+                       <option value="Cheque">Cheque</option>
+                       <option value="Valu">Valu</option>
+                    </select>
+                 </div>
+                 <div class="row g-2 mb-2" id="edit-method-extras" style="display:none;">
+                    <div class="col-6">
+                       <label class="small text-muted" id="edit-date-label">Date</label>
+                       <input type="date" class="form-control form-control-sm" id="editMethodDate">
+                    </div>
+                    <div class="col-6" id="edit-inst-wrapper" style="display:none;">
+                       <label class="small text-muted"># Months</label>
+                       <input type="number" class="form-control form-control-sm" id="editInstallments">
+                    </div>
+                 </div>
                  
                  <div class="mb-2">
                     <label class="small"><i class="fas fa-paperclip"></i> Add Files</label>
@@ -397,6 +515,7 @@
       <div class="modal fade" id="historyModal" tabindex="-1">
         <div class="modal-dialog modal-dialog-centered modal-dialog-scrollable">
           <div class="modal-content">
+            <input type="hidden" id="recordId">
             <div class="modal-header bg-light">
               <h5 class="modal-title"><i class="fas fa-history me-2"></i>Edit History</h5>
               <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
@@ -422,6 +541,8 @@
       let allTransactions = [];
       let displayedTransactions = [];
       let appSettings = {};
+      let currentTab = 'all'; 
+      let editCurrentFiles = []; // Store existing files for Edit Modal
       
       // Modals
       let expenseModal, paymentModal, editModal, historyModal;
@@ -787,7 +908,7 @@
          document.getElementById('payTotalDisplay').innerText = formatCurrency(e + f);
       }
 
-      function submitPayment() {
+      async function submitPayment() {
          const date = document.getElementById('payDate').value;
          const method = document.getElementById('payMethod').value;
          const expAmt = document.getElementById('payAmountExp').value;
@@ -796,6 +917,13 @@
          // Capture Extras
          const methodDate = document.getElementById('payMethodDate').value;
          const installments = document.getElementById('payInstallments').value;
+         
+         // Capture Files
+         const fileInput = document.getElementById('payFiles');
+         let fileData = [];
+         if(fileInput.files.length > 0) {
+             fileData = await Promise.all(Array.from(fileInput.files).map(f => readFile(f)));
+         }
 
          const transactions = [];
          
@@ -803,14 +931,16 @@
             transactions.push({
                date: date, type: 'Payment', scope: 'Joint Balance', 
                category: 'Deposit', amount: expAmt, description: 'Payment for Expenses',
-               paymentMethod: method, methodDate: methodDate, installments: installments, user: currentUser
+               paymentMethod: method, methodDate: methodDate, installments: installments, user: currentUser,
+               files: fileData
             });
          }
          if (feeAmt > 0) {
             transactions.push({
                date: date, type: 'Payment', scope: 'Joint Balance', 
                category: 'Fee Deposit', amount: feeAmt, description: 'Payment for Fees',
-               paymentMethod: method, methodDate: methodDate, installments: installments, user: currentUser
+               paymentMethod: method, methodDate: methodDate, installments: installments, user: currentUser,
+               files: fileData
             });
          }
 
@@ -818,15 +948,38 @@
             Swal.fire('Error', 'Please enter an amount', 'warning'); return;
          }
 
-         document.getElementById('btnSavePay').disabled = true;
+         const btn = document.getElementById('btnSavePay');
+         btn.disabled = true;
+         btn.innerText = "Processing...";
+
          google.script.run.withSuccessHandler(() => {
             paymentModal.hide();
             loadData();
-            document.getElementById('btnSavePay').disabled = false;
+            btn.disabled = false;
+            btn.innerText = "Save Payment";
          }).processBatch({ transactions: transactions });
       }
 
       // --- EDIT MODAL LOGIC (Legacy Single Mode) ---
+      function toggleEditMethodFields() {
+         const method = document.getElementById('editMethod').value;
+         const container = document.getElementById('edit-method-extras');
+         const dateLabel = document.getElementById('edit-date-label');
+         const instWrapper = document.getElementById('edit-inst-wrapper');
+
+         if (method === 'Cheque') {
+            container.style.display = 'flex';
+            dateLabel.innerText = 'Due Date';
+            instWrapper.style.display = 'none';
+         } else if (method === 'Valu') {
+            container.style.display = 'flex';
+            dateLabel.innerText = 'First Inst.';
+            instWrapper.style.display = 'block';
+         } else {
+            container.style.display = 'none';
+         }
+      }
+
       function openEditModal(id) {
          const t = allTransactions.find(x => x.ID === id);
          if(!t) return;
@@ -836,6 +989,13 @@
          document.getElementById('editCategory').value = t.Category;
          document.getElementById('editAmount').value = t.Amount;
          document.getElementById('editDesc').value = t.Description;
+         
+         // Populate Method
+         document.getElementById('editMethod').value = t.Payment_Method || '';
+         document.getElementById('editMethodDate').value = t.Method_Date || '';
+         document.getElementById('editInstallments').value = t.Installments || '';
+         toggleEditMethodFields();
+
          document.getElementById('editReason').value = '';
          document.getElementById('editExistingUrl').value = t.File_URL || '';
          document.getElementById('editExistingId').value = t.File_ID || '';
@@ -850,35 +1010,59 @@
          fields.forEach(f => document.getElementById(f).disabled = !isOwner);
          btn.style.display = isOwner ? 'block' : 'none';
 
-         // Render existing files
-         const list = document.getElementById('editExistingFilesList');
-         list.innerHTML = '';
-         if(t.File_URL) {
-            const urls = t.File_URL.split(',');
-            const ids = (t.File_ID || "").split(',');
-            
-            list.innerHTML = '<div class="small fw-bold text-muted mb-1">Attached Files:</div>';
-            urls.forEach((u, i) => {
-               if(u.trim()) {
-                   const div = document.createElement('div');
-                   div.className = "mb-1";
-                   div.innerHTML = `<a href="${u}" target="_blank" class="text-decoration-none text-primary"><i class="fas fa-external-link-alt me-1"></i> View Attachment ${i+1}</a>`;
-                   list.appendChild(div);
-               }
-            });
+         // Populate Existing Files Manager
+         editCurrentFiles = [];
+         if (t.File_URL) {
+             const urls = t.File_URL.split(',');
+             const ids = (t.File_ID || "").split(',');
+             urls.forEach((u, i) => {
+                 if(u.trim()) {
+                     editCurrentFiles.push({ url: u, id: ids[i] || "" });
+                 }
+             });
          }
+         renderEditFiles();
 
          editModal.show();
       }
 
-      function openHistoryFromEdit() {
-         const id = document.getElementById('editRecordId').value;
-         document.getElementById('recordId').value = id; // Hook for history function
-         showHistory();
+      function renderEditFiles() {
+         const list = document.getElementById('editExistingFilesList');
+         list.innerHTML = '';
+         
+         if(editCurrentFiles.length > 0) {
+            list.innerHTML = '<div class="small fw-bold text-muted mb-1">Attached Files:</div>';
+            editCurrentFiles.forEach((f, i) => {
+               const div = document.createElement('div');
+               div.className = "d-flex justify-content-between align-items-center mb-1 bg-white border rounded p-2";
+               div.innerHTML = `
+                 <a href="${f.url}" target="_blank" class="text-decoration-none text-primary small text-truncate" style="max-width: 85%;">
+                    <i class="fas fa-external-link-alt me-1"></i> Attachment ${i+1}
+                 </a>
+                 <button type="button" class="btn btn-sm btn-outline-danger border-0" onclick="removeEditFile(${i})">
+                    <i class="fas fa-times"></i>
+                 </button>
+               `;
+               list.appendChild(div);
+            });
+         }
+      }
+
+      function removeEditFile(index) {
+          editCurrentFiles.splice(index, 1);
+          renderEditFiles();
       }
 
       async function submitEdit() {
+         const btnId = 'btnUpdateEdit';
+         startLoading(btnId, "Updating...");
+
          const id = document.getElementById('editRecordId').value;
+         
+         // Sync removed files
+         document.getElementById('editExistingUrl').value = editCurrentFiles.map(f => f.url).join(',');
+         document.getElementById('editExistingId').value = editCurrentFiles.map(f => f.id).join(',');
+
          const filesInput = document.getElementById('editFiles');
          
          let fileData = [];
@@ -892,6 +1076,9 @@
             category: document.getElementById('editCategory').value,
             amount: document.getElementById('editAmount').value,
             description: document.getElementById('editDesc').value,
+            paymentMethod: document.getElementById('editMethod').value,
+            methodDate: document.getElementById('editMethodDate').value,
+            installments: document.getElementById('editInstallments').value,
             editReason: document.getElementById('editReason').value,
             user: currentUser,
             existingFileUrl: document.getElementById('editExistingUrl').value,
@@ -899,11 +1086,18 @@
             files: fileData
          };
 
-         google.script.run.withSuccessHandler((res) => {
-            editModal.hide();
-            Swal.fire('Updated', res.message, 'success');
-            loadData();
-         }).processForm(payload); // Calls legacy edit backend
+         google.script.run
+           .withSuccessHandler((res) => {
+              editModal.hide();
+              Swal.fire('Updated', res.message, 'success');
+              loadData();
+              stopLoading(btnId);
+           })
+           .withFailureHandler((err) => {
+              showError(err);
+              stopLoading(btnId);
+           })
+           .processForm(payload);
       }
 
       function readFile(file) {
@@ -965,6 +1159,16 @@
       }
 
       // --- HISTORY LOGIC ---
+      function openHistoryFromEdit() {
+         const id = document.getElementById('editRecordId').value;
+         document.getElementById('recordId').value = id; 
+         
+         // Trigger Loading on the "History" button inside Edit Modal
+         startLoading('btnHistory', 'Loading...');
+         
+         showHistory();
+      }
+
       function showHistory() {
         const id = document.getElementById('recordId').value;
         if(!id) return;
@@ -973,7 +1177,15 @@
         document.getElementById('history-loader').style.display = 'block';
         document.getElementById('history-list').innerHTML = '';
         
-        google.script.run.withSuccessHandler(renderHistory).getRecordHistory(id);
+        google.script.run
+          .withSuccessHandler((json) => {
+             renderHistory(json);
+             stopLoading('btnHistory'); // Stop loading on the triggering button
+          })
+          .withFailureHandler(() => {
+             stopLoading('btnHistory');
+          })
+          .getRecordHistory(id);
       }
 
       function renderHistory(json) {
@@ -988,6 +1200,21 @@
 
         list.forEach(item => {
           const d = item.data;
+          
+          // File Rendering Logic
+          let fileHtml = '<span class="text-muted small">None</span>';
+          if (d.files && d.files.toString().trim() !== '') {
+             const urls = d.files.toString().split(',');
+             fileHtml = '';
+             urls.forEach((u, i) => {
+                // Ensure we don't render empty links if double commas exist
+                if(u.trim()) {
+                    fileHtml += `<a href="${u}" target="_blank" class="d-block text-decoration-none small text-primary mb-1"><i class="fas fa-external-link-alt me-1"></i> View File ${i+1}</a>`;
+                }
+             });
+             if (fileHtml === '') fileHtml = '<span class="text-muted small">None</span>';
+          }
+
           const html = `
             <div class="history-item">
               <div class="history-meta">
@@ -1001,6 +1228,7 @@
                 <div class="history-val"><span class="history-label">Category</span> <span class="history-text">${d.category}</span></div>
                 <div class="history-val"><span class="history-label">Type</span> <span class="history-text">${d.type}</span></div>
                 <div class="history-val"><span class="history-label">Desc</span> <span class="history-text">${d.description}</span></div>
+                <div class="history-val"><span class="history-label">Files</span> <span class="history-text">${fileHtml}</span></div>
               </div>
             </div>
           `;
@@ -1014,29 +1242,54 @@
         const today = new Date();
         const chequeList = document.getElementById('cheque-list');
         chequeList.innerHTML = '';
+        
+        // 1. Calculate Valu (Strictly Payments)
         let valuMonthlyTotal = 0;
+        let valuPlans = [];
 
-        allTransactions.filter(t => t.Payment_Method === 'Valu').forEach(t => {
+        allTransactions.filter(t => t.Payment_Method === 'Valu' && t.Type === 'Payment').forEach(t => {
           if (!t.Method_Date || !t.Installments) return;
           const start = new Date(t.Method_Date);
           const months = parseInt(t.Installments);
           const amount = parseFloat(t.Amount);
           const monthly = amount / months;
+          
           const end = new Date(start);
           end.setMonth(start.getMonth() + months);
-          if (today >= start && today <= end) valuMonthlyTotal += monthly;
+          
+          // If plan is currently active
+          if (today >= start && today <= end) {
+             valuMonthlyTotal += monthly;
+             valuPlans.push(months);
+          }
         });
 
+        // Update Valu UI
         document.getElementById('monthly-valu-total').innerText = formatCurrency(valuMonthlyTotal);
+        
+        // Show months in label if active
+        let valuLabelText = "Valu Monthly";
+        if (valuPlans.length === 1) valuLabelText += ` (${valuPlans[0]} months)`;
+        else if (valuPlans.length > 1) valuLabelText += ` (${valuPlans.length} active plans)`;
+        
+        document.getElementById('valu-label').innerHTML = `<i class="fas fa-calendar-alt text-primary me-2"></i>${valuLabelText}`;
 
+
+        // 2. Calculate Cheques (Strictly Payments)
         const cheques = allTransactions
-          .filter(t => t.Payment_Method === 'Cheque' && t.Method_Date)
+          .filter(t => t.Payment_Method === 'Cheque' && t.Method_Date && t.Type === 'Payment')
           .sort((a, b) => new Date(a.Method_Date) - new Date(b.Method_Date));
+
+        let totalLiabilityAmount = valuMonthlyTotal; // Start with this month's Valu
+        let liabilityCount = (valuMonthlyTotal > 0 ? 1 : 0);
 
         if (cheques.length === 0) {
           chequeList.innerHTML = '<div class="text-muted small">No upcoming cheques.</div>';
         } else {
           cheques.forEach(c => {
+            totalLiabilityAmount += parseFloat(c.Amount);
+            liabilityCount++;
+
             const due = new Date(c.Method_Date);
             const diffTime = due - today;
             const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
@@ -1055,31 +1308,64 @@
             `;
           });
         }
+        
+        // 3. Update Header Summary
+        const headerHtml = `<i class="fas fa-exclamation-circle text-warning me-2"></i> Upcoming Liabilities 
+                            <span class="badge bg-secondary ms-2" style="font-weight:normal; font-size:0.8rem;">
+                               ${liabilityCount} Items &bull; ${formatCurrency(totalLiabilityAmount)}
+                            </span>`;
+        document.getElementById('liability-header-title').innerHTML = headerHtml;
+      }
+
+      function setTab(tab) {
+        currentTab = tab;
+        
+        // Update Buttons
+        document.querySelectorAll('.nav-pills .nav-link').forEach(btn => btn.classList.remove('active'));
+        if(tab === 'all') document.getElementById('tab-btn-all').classList.add('active');
+        if(tab === 'inflow') document.getElementById('tab-btn-in').classList.add('active');
+        if(tab === 'outflow') document.getElementById('tab-btn-out').classList.add('active');
+
+        renderList();
       }
 
       function renderList() {
         const container = document.getElementById('transaction-list');
         container.innerHTML = '';
-        document.getElementById('record-count').innerText = displayedTransactions.length;
 
-        if (displayedTransactions.length === 0) {
-          container.innerHTML = '<div class="text-center text-muted mt-5">No records found.</div>';
+        // Filter by Tab (on top of existing filters)
+        const tabFiltered = displayedTransactions.filter(t => {
+           if (currentTab === 'inflow') return t.Type.includes('Payment');
+           if (currentTab === 'outflow') return t.Type.includes('Expense');
+           return true; // All
+        });
+
+        document.getElementById('record-count').innerText = tabFiltered.length;
+
+        if (tabFiltered.length === 0) {
+          container.innerHTML = '<div class="text-center text-muted mt-5">No records found for this tab.</div>';
           return;
         }
 
-        displayedTransactions.forEach(t => {
+        tabFiltered.forEach(t => {
           const isOwnerOnly = t.Impact_Scope === 'Owner Only';
-          let typeClass = t.Type.includes('Payment') ? 'type-payment' : 'type-expense';
-          if (isOwnerOnly) typeClass = 'scope-owner';
+          const isPayment = t.Type.includes('Payment');
+          
+          // Determine Classes
+          let cardClass = isPayment ? 'type-payment' : 'type-expense';
+          if (isOwnerOnly) cardClass += ' scope-owner'; // Add dimming class
 
-          // File Icon Logic
+          let amountClass = isPayment ? 'amount-in' : 'amount-out';
+          let amountSign = isPayment ? '+' : '-';
+
+          // File Icon
           let fileIcon = '';
           if (t.File_URL) {
-             // If comma exists, it means multiple files
              const count = t.File_URL.split(',').length;
              fileIcon = `<i class="fas fa-paperclip ms-1 text-muted"></i>${count > 1 ? '<sup class="ms-1">'+count+'</sup>' : ''}`;
           }
           
+          // Method Icon
           let methodIcon = '';
           if (t.Payment_Method === 'Instapay') methodIcon = '<i class="fas fa-mobile-alt text-primary" title="Instapay"></i>';
           else if (t.Payment_Method === 'Cash') methodIcon = '<i class="fas fa-money-bill-wave text-success" title="Cash"></i>';
@@ -1087,23 +1373,24 @@
           else if (t.Payment_Method === 'Valu') methodIcon = '<i class="fas fa-calendar-check text-info" title="Valu"></i>';
 
           const html = `
-            <div class="trans-item ${typeClass}" onclick="openEditModal('${t.ID}')">
-              <div class="d-flex justify-content-between">
+            <div class="trans-item ${cardClass}" onclick="openEditModal('${t.ID}')">
+              <div class="d-flex justify-content-between align-items-center">
                 <div>
-                  <span class="trans-date">${t.Date}</span>
-                  <span class="trans-user-badge ms-2">${t.User}</span>
-                  ${isOwnerOnly ? '<span class="badge bg-secondary ms-1" style="font-size:0.6rem">Owner Only</span>' : ''}
+                  <div class="d-flex align-items-center">
+                    <span class="trans-date fw-bold text-dark">${t.Date}</span>
+                    ${isOwnerOnly ? '<span class="badge bg-light text-secondary border ms-2">Owner Only</span>' : ''}
+                  </div>
+                  <div class="small text-muted mt-1">
+                     ${t.User} &bull; ${methodIcon} ${t.Category} ${fileIcon}
+                  </div>
                 </div>
-                <div class="trans-amount ${isOwnerOnly ? 'text-muted text-decoration-line-through' : ''}">
-                  ${formatCurrency(t.Amount)}
-                </div>
-              </div>
-              <div class="d-flex justify-content-between align-items-center mt-1">
-                <div class="trans-cat">
-                  ${methodIcon} ${t.Category} ${fileIcon}
-                </div>
-                <div class="small text-muted text-truncate" style="max-width: 120px;">
-                  ${t.Description}
+                <div class="text-end">
+                  <div class="trans-amount ${amountClass}" style="font-size:1.1rem">
+                    ${amountSign} ${formatCurrency(t.Amount).replace('EGP', '')} <small style="font-size:0.7em">EGP</small>
+                  </div>
+                  <div class="small text-muted text-truncate" style="max-width: 120px;">
+                    ${t.Description}
+                  </div>
                 </div>
               </div>
             </div>
@@ -1113,9 +1400,15 @@
       }
       
       function populateDropdowns() {
-        // Use brackets ['Category'] to match the exact Sheet header/key
+        // 1. Get Data from Settings
         const categories = appSettings['Category'] || []; 
+        // Try to get Users from settings, or fallback to unique users in transactions
+        let users = appSettings['Users'] || [];
+        if (users.length === 0 && allTransactions.length > 0) {
+            users = [...new Set(allTransactions.map(t => t.User))];
+        }
         
+        // 2. Populate Hidden Datalist (for Input Auto-complete)
         const catList = document.getElementById('categoryOptions');
         if (catList) {
             catList.innerHTML = '';
@@ -1123,6 +1416,30 @@
                const opt = document.createElement('option');
                opt.value = c;
                catList.appendChild(opt);
+            });
+        }
+
+        // 3. Populate Filter: Category
+        const filterCat = document.getElementById('filter-cat');
+        if (filterCat) {
+            filterCat.innerHTML = '<option value="">All</option>'; // Reset
+            categories.forEach(c => {
+               const opt = document.createElement('option');
+               opt.value = c;
+               opt.innerText = c;
+               filterCat.appendChild(opt);
+            });
+        }
+
+        // 4. Populate Filter: User
+        const filterUser = document.getElementById('filter-user');
+        if (filterUser) {
+            filterUser.innerHTML = '<option value="">All</option>'; // Reset
+            users.forEach(u => {
+               const opt = document.createElement('option');
+               opt.value = u;
+               opt.innerText = u;
+               filterUser.appendChild(opt);
             });
         }
       }
@@ -1138,48 +1455,47 @@
         });
       }
 
-      function applyFilters() {
-        const fStart = document.getElementById('filter-start').value;
-        const fEnd = document.getElementById('filter-end').value;
-        const fUser = document.getElementById('filter-user').value;
-        const fCat = document.getElementById('filter-cat').value;
-        displayedTransactions = allTransactions.filter(t => {
-          let pass = true;
-          if (fStart && t.Date < fStart) pass = false;
-          if (fEnd && t.Date > fEnd) pass = false;
-          if (fUser && t.User !== fUser) pass = false;
-          if (fCat && t.Category !== fCat) pass = false;
-          return pass;
-        });
-        renderList();
-        calculateReportStats();
-      }
-
       function calculateGlobalStats() {
         let totalPaid = 0;
         let totalJointSpent = 0; 
         let totalAllSpent = 0;
+        let totalFeesPaid = 0; // Track amount paid towards fees
+
         allTransactions.forEach(t => {
           const amt = parseFloat(t.Amount);
           if (t.Type.includes('Payment')) {
              if (t.Impact_Scope === 'Joint Balance') totalPaid += amt;
+             
+             // Count Payments made specifically for 'Fee Deposit' (from Payment Modal)
+             if (t.Category === 'Fee Deposit') {
+                totalFeesPaid += amt;
+             }
           } 
           else if (t.Type.includes('Expense')) {
              totalAllSpent += amt;
              if (t.Impact_Scope === 'Joint Balance') {
-                 // LOGIC CHANGE: Exclude Fee Settlements from 10% Fee Base
+                 // Exclude Fee Settlements from 10% Fee Base
                  if (t.Category !== 'Fee Settlement') {
                     totalJointSpent += amt;
                  }
              }
           }
         });
+        
+        // 1. Calculate Total Liability (Accumulated 10%)
         const fees = totalJointSpent * 0.10;
+        
+        // 2. Balance Equation
         const balance = totalPaid - (totalJointSpent + fees);
         
         document.getElementById('stat-paid').innerText = formatCurrency(totalPaid);
         document.getElementById('stat-spent').innerText = formatCurrency(totalJointSpent);
-        document.getElementById('stat-fees').innerText = formatCurrency(fees);
+        
+        // 3. Update Fee Display: "1,000 EGP (200 EGP paid)"
+        document.getElementById('stat-fees').innerHTML = `
+            ${formatCurrency(fees)} 
+            <span class="small opacity-75 ms-1" style="font-size:0.7em">(${formatCurrency(totalFeesPaid)} paid)</span>
+        `;
         
         const balEl = document.getElementById('stat-balance');
         const statusEl = document.getElementById('stat-status');
@@ -1212,20 +1528,164 @@
         }
       }
 
-      function resetFilters() {
-        document.getElementById('filter-start').value = '';
-        document.getElementById('filter-end').value = '';
-        document.getElementById('filter-user').value = '';
-        document.getElementById('filter-cat').value = '';
-        applyFilters();
-      }
-
       function formatCurrency(num) { return new Intl.NumberFormat('en-US', { style: 'currency', currency: 'EGP' }).format(num); }
       function showError(e) { 
         console.error(e);
         if (document.activeElement) document.activeElement.blur();
         document.getElementById('loading').style.display = 'none';
         Swal.fire('Error', e.message || e, 'error'); 
+      }
+
+// --- FILTER & REPORTING LOGIC ---
+
+      function toggleFilterCategory() {
+         const type = document.getElementById('filter-type').value;
+         const catWrapper = document.getElementById('filter-cat-wrapper');
+         // Hide Category if Type is Payment or Fees
+         if (type === 'Payment' || type === 'Fees') {
+            catWrapper.style.visibility = 'hidden';
+            document.getElementById('filter-cat').value = ''; 
+         } else {
+            catWrapper.style.visibility = 'visible';
+         }
+      }
+
+      function applyFilters() {
+        const fStart = document.getElementById('filter-start').value;
+        const fEnd = document.getElementById('filter-end').value;
+        const fUser = document.getElementById('filter-user').value;
+        const fType = document.getElementById('filter-type').value;
+        const fCat = document.getElementById('filter-cat').value;
+        const fSort = document.getElementById('filter-sort').value;
+
+        // 1. Filter
+        displayedTransactions = allTransactions.filter(t => {
+          if (fStart && t.Date < fStart) return false;
+          if (fEnd && t.Date > fEnd) return false;
+          if (fUser && t.User !== fUser) return false;
+          
+          // Type Logic
+          if (fType === 'Payment') {
+             if (!t.Type.includes('Payment')) return false;
+             if (t.Category === 'Fee Deposit') return false; // Exclude fees
+          }
+          else if (fType === 'Expense') {
+             if (!t.Type.includes('Expense')) return false;
+             if (t.Category === 'Fee Settlement') return false; // Exclude fees
+          }
+          else if (fType === 'Fees') {
+             // Fees are defined as Fee Settlement (Exp) or Fee Deposit (Pay)
+             if (t.Category !== 'Fee Settlement' && t.Category !== 'Fee Deposit') return false;
+          }
+          
+          // Category Logic (only if visible/relevant)
+          if (fCat && fCat !== '' && fType !== 'Payment' && fType !== 'Fees') {
+             if (t.Category !== fCat) return false;
+          }
+
+          return true;
+        });
+
+        // 2. Sort
+        displayedTransactions.sort((a, b) => {
+           const dateA = new Date(a.Date);
+           const dateB = new Date(b.Date);
+           const amtA = parseFloat(a.Amount);
+           const amtB = parseFloat(b.Amount);
+
+           switch(fSort) {
+              case 'date-desc': return dateB - dateA;
+              case 'date-asc': return dateA - dateB;
+              case 'amt-desc': return amtB - amtA;
+              case 'amt-asc': return amtA - amtB;
+              default: return dateB - dateA;
+           }
+        });
+
+        renderList();
+        calculateReportStats();
+        
+        // Auto-close accordion on mobile for better UX
+        const accordionBtn = document.querySelector('.accordion-button');
+        if(!accordionBtn.classList.contains('collapsed') && window.innerWidth < 768) {
+           accordionBtn.click();
+        }
+      }
+
+      function resetFilters() {
+        document.getElementById('filter-start').value = '';
+        document.getElementById('filter-end').value = '';
+        document.getElementById('filter-user').value = '';
+        document.getElementById('filter-type').value = 'All';
+        document.getElementById('filter-cat').value = '';
+        document.getElementById('filter-sort').value = 'date-desc';
+        document.getElementById('filter-group').value = 'none';
+        toggleFilterCategory();
+        applyFilters();
+      }
+
+      function generateAndPrintReport() {
+         applyFilters(); // Ensure current data matches
+         
+         const groupBy = document.getElementById('filter-group').value;
+         const container = document.getElementById('printable-report');
+         const now = new Date().toLocaleString();
+         
+         let html = `
+            <div class="rep-header">
+               <h2>Apartment Financial Report</h2>
+               <p>Generated: ${now} &bull; Records: ${displayedTransactions.length}</p>
+            </div>
+         `;
+
+         // Helper to build table
+         const buildTable = (rows) => {
+            let tHtml = `<table class="rep-table">
+               <thead><tr><th>Date</th><th>User</th><th>Category</th><th>Desc</th><th style="text-align:right">Amount</th></tr></thead><tbody>`;
+            let subTotal = 0;
+            rows.forEach(r => {
+               const amt = parseFloat(r.Amount);
+               const isPay = r.Type.includes('Payment');
+               subTotal += isPay ? amt : -amt; // Net flow for total
+               
+               tHtml += `<tr>
+                  <td>${r.Date}</td>
+                  <td>${r.User}</td>
+                  <td>${r.Category}</td>
+                  <td>${r.Description}</td>
+                  <td style="text-align:right; color: ${isPay?'green':'red'}">
+                     ${isPay?'+':'-'} ${formatCurrency(Math.abs(amt)).replace('EGP','')}
+                  </td>
+               </tr>`;
+            });
+            tHtml += `<tr class="rep-total-row"><td colspan="4">NET TOTAL</td><td style="text-align:right">${formatCurrency(subTotal)}</td></tr>`;
+            tHtml += `</tbody></table>`;
+            return tHtml;
+         };
+
+         if (groupBy === 'none') {
+            html += buildTable(displayedTransactions);
+         } else {
+            // Grouping Logic
+            const groups = {};
+            displayedTransactions.forEach(t => {
+               let key = "";
+               if (groupBy === 'Month') key = t.Date.substring(0, 7); // YYYY-MM
+               else key = t[groupBy] || "Other";
+               
+               if (!groups[key]) groups[key] = [];
+               groups[key].push(t);
+            });
+
+            // Iterate Keys
+            Object.keys(groups).sort().forEach(key => {
+               html += `<div class="rep-section-title">${groupBy}: ${key}</div>`;
+               html += buildTable(groups[key]);
+            });
+         }
+
+         container.innerHTML = html;
+         window.print();
       }
 
       // --- HELPER: MATH EVALUATOR ---
@@ -1256,6 +1716,25 @@
             }
          }
       }
+
+      // --- LOADING HELPERS ---
+      function startLoading(btnId, loadingText = "Loading...") {
+         const btn = document.getElementById(btnId);
+         if(btn) {
+            btn.dataset.originalText = btn.innerHTML; // Store original html (icon+text)
+            btn.disabled = true;
+            btn.innerHTML = `<span class="spinner-border spinner-border-sm me-2"></span>${loadingText}`;
+         }
+      }
+
+      function stopLoading(btnId) {
+         const btn = document.getElementById(btnId);
+         if(btn) {
+            btn.disabled = false;
+            if(btn.dataset.originalText) btn.innerHTML = btn.dataset.originalText;
+         }
+      }
+
     </script>
   </body>
 </html>
