@@ -71,72 +71,127 @@ function getInitialData() {
 }
 
 /* -------------------------------------------------------------------------
-   API: HANDLE FORM SUBMIT
+   API: HANDLE BATCH SUBMIT (New)
    ------------------------------------------------------------------------- */
-function processForm(formObject) {
+function processBatch(payload) {
   const ss = SpreadsheetApp.getActiveSpreadsheet();
   const transSheet = ss.getSheetByName(SHEET_NAME_TRANS);
   const settingsSheet = ss.getSheetByName(SHEET_NAME_SETTINGS);
   
-  // Auto-Save New Categories
-  if (formObject.category) {
-    const existingCats = settingsSheet.getDataRange().getValues()
-      .filter(r => r[0] === 'Category')
-      .map(r => r[1]);
-    if (!existingCats.includes(formObject.category)) {
-      settingsSheet.appendRow(['Category', formObject.category]);
-    }
-  }
-
-  // --- MULTI-FILE UPLOAD LOGIC ---
-  // 1. Start with existing files (that weren't deleted by the user)
-  let finalUrls = formObject.existingFileUrl ? formObject.existingFileUrl.split(',') : [];
-  let finalIds = formObject.existingFileId ? formObject.existingFileId.split(',') : [];
-  
-  // 2. Process NEW uploads (Array of objects)
-  // formObject.files will be an array of { data: "base64...", name: "filename" }
-  if (formObject.files && Array.isArray(formObject.files)) {
-    formObject.files.forEach(fileObj => {
-      const result = saveFileToDrive(fileObj.data, fileObj.name);
-      finalUrls.push(result.url);
-      finalIds.push(result.id);
-    });
-  }
-
-  // 3. Join back to strings
-  const strUrls = finalUrls.join(',');
-  const strIds = finalIds.join(',');
-  // -------------------------------
-
   const timestamp = new Date();
-  
-  if (formObject.recordId) {
-    // Edit Mode
-    handleEdit(formObject.recordId, formObject, strUrls, strIds, timestamp);
-    return { success: true, message: "Record Updated Successfully" };
-  } else {
-    // New Mode
-    const newId = Utilities.getUuid();
-    const newRow = [
-      newId,
+  const newIds = [];
+
+  // payload.transactions is an array of objects
+  payload.transactions.forEach(t => {
+    
+    // 1. Save Category if new (only for Expenses)
+    if (t.category && t.type === 'Expense') {
+      const existingCats = settingsSheet.getDataRange().getValues()
+        .filter(r => r[0] === 'Category')
+        .map(r => r[1]);
+      if (!existingCats.includes(t.category) && t.category !== 'Fee Settlement') {
+        settingsSheet.appendRow(['Category', t.category]);
+      }
+    }
+
+    // 2. Handle File Uploads (Base64 -> Drive)
+    let strUrls = t.existingFileUrl || "";
+    let strIds = t.existingFileId || "";
+    
+    if (t.files && Array.isArray(t.files)) {
+      const newUrls = [];
+      const newIdsArr = [];
+      t.files.forEach(f => {
+        const result = saveFileToDrive(f.data, f.name);
+        newUrls.push(result.url);
+        newIdsArr.push(result.id);
+      });
+      // Append to existing
+      strUrls = strUrls ? strUrls + "," + newUrls.join(',') : newUrls.join(',');
+      strIds = strIds ? strIds + "," + newIdsArr.join(',') : newIdsArr.join(',');
+    }
+
+    // 3. Create Main Record
+    const mainId = Utilities.getUuid();
+    newIds.push(mainId);
+    
+    const rowData = [
+      mainId,
       timestamp,
-      formObject.date,
-      formObject.user,
-      formObject.type,
-      formObject.scope,
-      formObject.category,
-      formObject.amount,
-      formObject.description,
-      strUrls, // Saved as comma-separated string
-      strIds,  // Saved as comma-separated string
-      formObject.user,
-      formObject.paymentMethod,
-      formObject.methodDate,
-      formObject.installments
+      t.date,
+      t.user,
+      t.type,          // 'Expense' or 'Payment'
+      t.scope,         // 'Joint Balance' or 'Owner Only'
+      t.category,
+      t.amount,
+      t.description,
+      strUrls,
+      strIds,
+      t.user, // Creator
+      t.paymentMethod || "",
+      t.methodDate || "",
+      t.installments || ""
     ];
-    transSheet.appendRow(newRow);
-    return { success: true, message: "Record Added Successfully" };
+    transSheet.appendRow(rowData);
+
+    // 4. LOGIC: Owner Only Dual Transaction
+    // If it's an Expense marked "Owner Only", we immediately inject a "Payment" to settle it.
+    if (t.type === 'Expense' && t.scope === 'Owner Only') {
+      const shadowId = Utilities.getUuid();
+      const shadowRow = [
+        shadowId,
+        timestamp,
+        t.date,
+        t.user,
+        'Payment',       // Flip to Payment
+        'Owner Only',    // Keep Scope
+        'Owner Cover',   // System Category
+        t.amount,        // Same Amount
+        '[Auto] Offset for: ' + t.description,
+        '', '',          // No files needed for shadow
+        t.user,
+        t.paymentMethod, // Use the method selected (e.g. Cash/Instapay)
+        t.methodDate || "",
+        t.installments || ""
+      ];
+      transSheet.appendRow(shadowRow);
+    }
+  });
+
+  return { success: true, message: "Saved " + newIds.length + " record(s)." };
+}
+
+/* -------------------------------------------------------------------------
+   API: HANDLE EDIT (Legacy/Single)
+   ------------------------------------------------------------------------- */
+function processForm(formObject) {
+  // Wrapper to redirect single edits to the batch processor logic or handle separately
+  // For safety, we keep the original logic for EDITS only.
+  
+  if (!formObject.recordId) return { success: false, message: "Use processBatch for new records" };
+
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  const transSheet = ss.getSheetByName(SHEET_NAME_TRANS);
+  // ... (Reuse handleEdit logic) ...
+  
+  // Re-process files for Edit
+  let strUrls = formObject.existingFileUrl || "";
+  let strIds = formObject.existingFileId || "";
+  
+  if (formObject.files && Array.isArray(formObject.files)) {
+      const newUrls = [];
+      const newIdsArr = [];
+      formObject.files.forEach(f => {
+        const res = saveFileToDrive(f.data, f.name);
+        newUrls.push(res.url);
+        newIdsArr.push(res.id);
+      });
+      strUrls = strUrls ? strUrls + "," + newUrls.join(',') : newUrls.join(',');
+      strIds = strIds ? strIds + "," + newIdsArr.join(',') : newIdsArr.join(',');
   }
+
+  handleEdit(formObject.recordId, formObject, strUrls, strIds, new Date());
+  return { success: true, message: "Record Updated" };
 }
 
 /* -------------------------------------------------------------------------
